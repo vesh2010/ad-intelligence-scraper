@@ -57,25 +57,26 @@ async def fetch_ads_txt(site_url: str, timeout_s: float = 10.0) -> dict[str, Any
     ) as client:
         last_error: str | None = None
         for host in dict.fromkeys(hosts):
-            url = f"https://{host}/ads.txt"
-            try:
-                response = await client.get(url)
-            except httpx.HTTPError as exc:
-                last_error = str(exc)
-                continue
+            for scheme in ("https", "http"):
+                url = f"{scheme}://{host}/ads.txt"
+                try:
+                    response = await client.get(url)
+                except httpx.HTTPError as exc:
+                    last_error = str(exc)
+                    continue
 
-            if response.status_code != 200 or not response.text.strip():
-                last_error = f"HTTP {response.status_code} from {response.url}"
-                continue
+                if response.status_code != 200 or not response.text.strip():
+                    last_error = f"HTTP {response.status_code} from {response.url}"
+                    continue
 
-            parsed_ads = parse_ads_txt(response.text)
-            return {
-                "found": True,
-                "requested_url": url,
-                "final_url": str(response.url),
-                "status": response.status_code,
-                **parsed_ads,
-                "raw_text": response.text,
-            }
+                parsed_ads = parse_ads_txt(response.text)
+                return {
+                    "found": True,
+                    "requested_url": url,
+                    "final_url": str(response.url),
+                    "status": response.status_code,
+                    **parsed_ads,
+                    "raw_text": response.text,
+                }
 
     return {"found": False, "error": last_error or "ads.txt not found"}
