@@ -20,6 +20,9 @@ class AdRecord(BaseModel):
     cpm: float | None = None
     currency: str | None = None
     deal_id: str | None = None
+    destination_urls: list[str] = Field(default_factory=list)
+    creative_image_urls: list[str] = Field(default_factory=list)
+    creative_video_urls: list[str] = Field(default_factory=list)
     placement: dict[str, object] | None = None
     evidence: list[str] = Field(default_factory=list)
     confidence: float = 0.0
