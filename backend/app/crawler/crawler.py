@@ -8,10 +8,11 @@ from urllib.parse import urlparse
 
 from playwright.async_api import async_playwright
 
-from ..ad_pipeline import detect_ads
 from ..ad_models import AdDetectionResult
+from ..ad_pipeline import detect_ads
 from ..dom_extract import DOM_SCRIPT
 from ..runtime_ads import collect_runtime_ads
+from ..visual_evidence import capture_dom_ad_evidence
 from .models import CrawlRequest, CrawlResult
 from .security import redact_headers
 
@@ -39,6 +40,7 @@ class SiteCrawler:
         page_errors: list[str] = []
         ad_detection = AdDetectionResult()
         runtime_snapshots: list[dict[str, object]] = []
+        visual_evidence: list[dict[str, object]] = []
 
         async with async_playwright() as p:
             try:
@@ -94,22 +96,30 @@ class SiteCrawler:
 
                 dom_candidates = await page.evaluate(DOM_SCRIPT)
                 ad_detection = detect_ads(network, dom_candidates)
-                runtime_snapshots.append({
-                    "stage": "post_load",
-                    "captured_at_ms": round((time.perf_counter() - started) * 1000),
-                    "data": await collect_runtime_ads(page),
-                })
+                runtime_snapshots.append(
+                    {
+                        "stage": "post_load",
+                        "captured_at_ms": round((time.perf_counter() - started) * 1000),
+                        "data": await collect_runtime_ads(page),
+                    }
+                )
 
                 await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                 await page.wait_for_timeout(min(request.wait_ms, 1500))
                 dom_candidates_after_scroll = await page.evaluate(DOM_SCRIPT)
                 scroll_detection = detect_ads(network, dom_candidates_after_scroll)
                 ad_detection = self._merge_detection(ad_detection, scroll_detection)
-                runtime_snapshots.append({
-                    "stage": "post_scroll",
-                    "captured_at_ms": round((time.perf_counter() - started) * 1000),
-                    "data": await collect_runtime_ads(page),
-                })
+                runtime_snapshots.append(
+                    {
+                        "stage": "post_scroll",
+                        "captured_at_ms": round((time.perf_counter() - started) * 1000),
+                        "data": await collect_runtime_ads(page),
+                    }
+                )
+
+                visual_evidence = await capture_dom_ad_evidence(
+                    page, dom_candidates_after_scroll, run_dir
+                )
                 await page.evaluate("window.scrollTo(0, 0)")
 
                 html = await page.content()
@@ -161,6 +171,7 @@ class SiteCrawler:
             "screenshot": str(run_dir / "screenshot.png"),
             "ads": str(run_dir / "ads.json"),
             "runtime_ads": str(run_dir / "runtime_ads.json"),
+            "visual_evidence": str(run_dir / "visual_evidence.json"),
         }
         if request.trace:
             artifacts["trace"] = str(run_dir / "trace.zip")
@@ -183,6 +194,7 @@ class SiteCrawler:
             artifacts=artifacts,
             ad_detection=ad_detection,
             runtime_ads={"snapshots": runtime_snapshots},
+            visual_evidence=visual_evidence,
         )
         (run_dir / "result.json").write_text(
             json.dumps(result.model_dump(), indent=2), encoding="utf-8"
