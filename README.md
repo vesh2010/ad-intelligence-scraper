@@ -1,23 +1,25 @@
 # Ad Intelligence Scraper
 
-M1: rendered-page crawler foundation for ad intelligence research.
+A browser-based web ad intelligence collector. The pipeline is being built incrementally so every stage leaves inspectable evidence for later analysis.
 
-## M1 scope
+## Current scope: M1 + M2 + supply-chain foundation
 
 - Playwright Chromium crawl
-- final URL and redirect information
-- page title and metadata
-- images, scripts, links, iframes and frames
-- network request/response inventory
-- console and page errors
-- viewport/full-page screenshots
-- raw rendered HTML
-- optional Playwright trace
-- JSON run manifest
-- FastAPI API
-- unit tests for validation and redaction
+- rendered HTML and full-page screenshot
+- redirect, frame, image, script and link inventory
+- browser network request/response inventory
+- console and page-error capture
+- Playwright trace
+- DOM ad-candidate detection with conservative markers
+- Google Publisher Tag runtime extraction
+- Prebid.js runtime extraction
+- normalized ad records with advertiser/brand/bid metadata when the publisher exposes it
+- DOM candidate screenshots and geometry
+- public `ads.txt` retrieval and parsing
+- raw JSON artifacts for every crawl
+- FastAPI API plus a built-in inspection UI
 
-Ad classification, advertiser identification and bid/auction extraction are intentionally deferred to M2.
+Product identity is intentionally not guessed yet. Landing-page enrichment, stronger visual classification, deduplication/history, broader supply-chain resolution and GPT analysis are later stages.
 
 ## Run locally
 
@@ -29,18 +31,48 @@ python -m playwright install chromium
 uvicorn app.main:app --app-dir backend --reload
 ```
 
-Open `http://127.0.0.1:8000/docs` and POST to `/api/crawl` with:
+Open:
+
+`http://127.0.0.1:8000/`
+
+The default UI target is NDTV Profit. Enter another HTTP(S) URL to test a different page.
+
+The API remains available at:
+
+`http://127.0.0.1:8000/docs`
+
+Example request:
 
 ```json
 {"url":"https://www.ndtvprofit.com/"}
 ```
 
+## Crawl artifacts
+
+Each run is written beneath `data/runs/<run_id>/` and can contain:
+
+```text
+page.html
+screenshot.png
+ads.json
+runtime_ads.json
+visual_evidence.json
+ad_records.json
+ads.txt.json
+trace.zip
+result.json
+ad_candidates/*.png
+```
+
 ## Tests
 
 ```bash
+cd backend
 pytest -q
 ```
 
-## Browser note
+CI installs Chromium and executes the browser regression tests as well as the pure Python tests.
 
-The repository is designed to run Chromium through Playwright. A browser executable must be installed in the runtime. The current development environment could install the Python package but could not download Chromium because its network/DNS access to the Playwright CDN is unavailable; therefore a live browser crawl is not represented as passing CI here.
+## Current testing limitation
+
+This ChatGPT execution environment has a Chromium binary available for synthetic local browser tests, but DNS access to external sites is unavailable. Consequently, the NDTV Profit crawl itself cannot be honestly marked as live-tested from this environment. The repository's CI is configured to install Chromium so the browser tests run in GitHub Actions.
