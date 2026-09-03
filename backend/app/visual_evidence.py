@@ -9,6 +9,7 @@ from playwright.async_api import Page
 
 from .ad_detection import classify_dom_candidates
 from .creative_assets import capture_creative_assets
+from .visual_analysis import classify_visual_evidence
 
 
 async def _candidate_locator(page: Page, candidate: dict[str, Any]):
@@ -28,8 +29,9 @@ async def capture_dom_ad_evidence(
     output_dir: str | Path,
     max_candidates: int = 40,
     capture_assets: bool = True,
+    analyze_visuals: bool = True,
 ) -> list[dict[str, Any]]:
-    """Capture screenshots, geometry, and observed creative assets for ad candidates."""
+    """Capture screenshots, geometry, creative assets, and explainable visual signals."""
     run_dir = Path(output_dir)
     evidence_dir = run_dir / "ad_candidates"
     evidence_dir.mkdir(parents=True, exist_ok=True)
@@ -95,6 +97,12 @@ async def capture_dom_ad_evidence(
             for url in [*(item.get("image_urls") or []), *(item.get("video_urls") or [])]
             if url in asset_by_url
         ]
+        if analyze_visuals and item.get("screenshot"):
+            item.update(
+                classify_visual_evidence(
+                    item["screenshot"], item.get("bbox"), item.get("creative_assets")
+                )
+            )
 
     (run_dir / "creative_assets.json").write_text(
         json.dumps(assets, indent=2), encoding="utf-8"
