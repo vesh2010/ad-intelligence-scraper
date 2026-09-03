@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ad Intelligence Scraper</title>
+  <style>
+    :root { font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #111827; background: #f3f4f6; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 1180px; margin: 0 auto; padding: 28px 18px 50px; }
+    h1 { margin: 0 0 6px; font-size: 28px; }
+    .sub { color: #6b7280; margin-bottom: 22px; }
+    .card { background: white; border: 1px solid #e5e7eb; border-radius: 14px; padding: 18px; margin-bottom: 16px; box-shadow: 0 4px 14px rgba(0,0,0,.04); }
+    label { display: block; font-weight: 600; margin-bottom: 8px; }
+    input[type=url] { width: 100%; padding: 12px 13px; border: 1px solid #d1d5db; border-radius: 10px; font-size: 15px; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    button { border: 0; border-radius: 10px; padding: 11px 16px; cursor: pointer; font-weight: 700; background: #111827; color: white; }
+    button:disabled { opacity: .5; cursor: wait; }
+    .status { margin-top: 12px; font-weight: 700; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+    .metric { padding: 14px; border: 1px solid #e5e7eb; border-radius: 10px; }
+    .metric b { display: block; font-size: 24px; margin-top: 4px; }
+    .muted { color: #6b7280; font-size: 13px; }
+    .pill { display: inline-block; border: 1px solid #d1d5db; border-radius: 999px; padding: 5px 9px; margin: 3px 4px 0 0; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 9px 7px; border-bottom: 1px solid #eef0f3; vertical-align: top; }
+    pre { overflow: auto; max-height: 380px; background: #111827; color: #e5e7eb; padding: 14px; border-radius: 10px; font-size: 12px; }
+    img { max-width: 100%; border: 1px solid #e5e7eb; border-radius: 10px; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 800px) { .two { grid-template-columns: 1fr; } }
+    .error { color: #b91c1c; }
+    .ok { color: #166534; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Ad Intelligence Scraper</h1>
+  <div class="sub">M2: crawl a rendered page and inspect ad, runtime, visual, and supply-chain evidence.</div>
+
+  <section class="card">
+    <label for="url">Website URL</label>
+    <input id="url" type="url" value="https://www.ndtvprofit.com/" placeholder="https://example.com/" />
+    <div class="row" style="margin-top:12px">
+      <label style="margin:0"><input id="trace" type="checkbox" checked /> Capture Playwright trace</label>
+      <button id="crawl">Start crawl</button>
+    </div>
+    <div id="status" class="status"></div>
+  </section>
+
+  <div id="result" hidden>
+    <section class="card">
+      <div class="muted">Crawl</div>
+      <h2 id="pageTitle">-</h2>
+      <div id="pageUrl" class="muted"></div>
+      <div class="grid" style="margin-top:14px">
+        <div class="metric">HTTP<b id="http">-</b></div>
+        <div class="metric">Duration<b id="duration">-</b></div>
+        <div class="metric">Network signals<b id="networkSignals">-</b></div>
+        <div class="metric">DOM ad signals<b id="domSignals">-</b></div>
+        <div class="metric">Ad records<b id="adRecords">-</b></div>
+        <div class="metric">Visual evidence<b id="visualCount">-</b></div>
+      </div>
+    </section>
+
+    <section class="two">
+      <section class="card">
+        <h3>Rendered page</h3>
+        <img id="screenshot" alt="Rendered crawl screenshot" />
+      </section>
+      <section class="card">
+        <h3>Ad technologies</h3>
+        <div id="technologies"></div>
+        <h3>Runtime</h3>
+        <pre id="runtime"></pre>
+      </section>
+    </section>
+
+    <section class="card">
+      <h3>Normalized ad records</h3>
+      <div id="records"></div>
+    </section>
+
+    <section class="card">
+      <h3>Supply chain: ads.txt</h3>
+      <pre id="adsTxt"></pre>
+    </section>
+
+    <section class="card">
+      <h3>Raw crawl JSON</h3>
+      <pre id="raw"></pre>
+    </section>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (value) => String(value ?? '').replace(/[&<>\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\\':'&#92;','"':'&quot;'}[c]));
+
+function renderRecords(records) {
+  if (!records.length) return '<div class="muted">No normalized records were produced.</div>';
+  return `<table><thead><tr><th>Type</th><th>Advertiser</th><th>Brand</th><th>Bidder</th><th>CPM</th><th>Evidence</th></tr></thead><tbody>${records.map(r =>
+    `<tr><td>${esc(r.ad_type)}</td><td>${esc(r.advertiser_name || r.advertiser_id || '-')}</td><td>${esc(r.brand_name || '-')}</td><td>${esc(r.bidder || '-')}</td><td>${esc(r.cpm != null ? `${r.cpm} ${r.currency || ''}` : '-')}</td><td>${(r.evidence || []).map(e => `<span class="pill">${esc(e)}</span>`).join('')}</td></tr>`
+  ).join('')}</tbody></table>`;
+}
+
+$('crawl').addEventListener('click', async () => {
+  const button = $('crawl');
+  const url = $('url').value.trim();
+  if (!url) return;
+  button.disabled = true;
+  $('status').className = 'status';
+  $('status').textContent = 'Crawling...';
+  try {
+    const response = await fetch('/api/crawl', {
+      method: 'POST',
+      headers: {'content-type': 'application/json'},
+      body: JSON.stringify({url, trace: $('trace').checked})
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Crawl failed');
+    $('status').className = 'status ok';
+    $('status').textContent = `Complete: ${data.run_id}`;
+    $('result').hidden = false;
+    $('pageTitle').textContent = data.title || '(untitled)';
+    $('pageUrl').textContent = data.final_url;
+    $('http').textContent = data.status ?? '-';
+    $('duration').textContent = `${data.elapsed_ms} ms`;
+    $('networkSignals').textContent = data.ad_detection?.network_signal_count ?? 0;
+    $('domSignals').textContent = data.ad_detection?.dom_signal_count ?? 0;
+    $('adRecords').textContent = (data.ad_records || []).length;
+    $('visualCount').textContent = (data.visual_evidence || []).length;
+    $('technologies').innerHTML = (data.ad_detection?.technologies || []).map(x => `<span class="pill">${esc(x)}</span>`).join('') || '<span class="muted">None detected</span>';
+    $('runtime').textContent = JSON.stringify(data.runtime_ads || {}, null, 2);
+    $('adsTxt').textContent = JSON.stringify(data.ads_txt || {}, null, 2);
+    $('records').innerHTML = renderRecords(data.ad_records || []);
+    $('raw').textContent = JSON.stringify(data, null, 2);
+    $('screenshot').src = `/api/runs/${data.run_id}/artifact/screenshot`;
+  } catch (error) {
+    $('status').className = 'status error';
+    $('status').textContent = error.message || String(error);
+  } finally {
+    button.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
