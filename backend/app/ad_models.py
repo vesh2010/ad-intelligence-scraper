@@ -25,6 +25,12 @@ class AdSignal(BaseModel):
     x: int | None = None
     y: int | None = None
     iframe_src: str | None = None
+    hrefs: list[str] = Field(default_factory=list)
+    image_urls: list[str] = Field(default_factory=list)
+    video_urls: list[str] = Field(default_factory=list)
+    position_mode: str | None = None
+    z_index: str | None = None
+    dataset: dict[str, str] = Field(default_factory=dict)
 
 
 class AdDetectionResult(BaseModel):
