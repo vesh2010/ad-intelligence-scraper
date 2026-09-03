@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -24,6 +26,7 @@ class AdRecord(BaseModel):
     destination_urls: list[str] = Field(default_factory=list)
     creative_image_urls: list[str] = Field(default_factory=list)
     creative_video_urls: list[str] = Field(default_factory=list)
+    landing_page: dict[str, Any] | None = None
     placement: dict[str, object] | None = None
     evidence: list[str] = Field(default_factory=list)
     confidence: float = 0.0
