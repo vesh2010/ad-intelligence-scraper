@@ -37,7 +37,7 @@ class SiteCrawler:
         async with async_playwright() as p:
             try:
                 browser = await p.chromium.launch(headless=True)
-            except Exception as exc:  # browser installation/runtime failure
+            except Exception as exc:
                 raise CrawlError(
                     "Chromium could not be launched. Install it with "
                     "`python -m playwright install chromium` in the runtime."
@@ -48,6 +48,11 @@ class SiteCrawler:
                 service_workers="block",
             )
             page = await context.new_page()
+
+            if request.trace:
+                await context.tracing.start(
+                    screenshots=True, snapshots=True, sources=True
+                )
 
             def on_console(message) -> None:
                 if message.type == "error":
@@ -67,14 +72,10 @@ class SiteCrawler:
                         "headers": redact_headers(await response.all_headers()),
                     }
                 )
-                if response.request.redirected_from:
-                    source = response.request.redirected_from
+                source = response.request.redirected_from
+                if source:
                     redirects.append(
-                        {
-                            "from": source.url,
-                            "to": response.url,
-                            "status": response.status,
-                        }
+                        {"from": source.url, "to": response.url, "status": response.status}
                     )
 
             page.on("console", on_console)
@@ -88,7 +89,6 @@ class SiteCrawler:
             )
             await page.wait_for_timeout(request.wait_ms)
 
-            # Trigger common lazy-loaded content without interacting with forms/dialogs.
             await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             await page.wait_for_timeout(min(request.wait_ms, 1500))
             await page.evaluate("window.scrollTo(0, 0)")
@@ -96,11 +96,6 @@ class SiteCrawler:
             html = await page.content()
             await (run_dir / "page.html").write_text(html, encoding="utf-8")
             await page.screenshot(path=str(run_dir / "screenshot.png"), full_page=True)
-
-            if request.trace:
-                await context.tracing.start(screenshots=True, snapshots=True, sources=True)
-                # Trace starts too late to include navigation; kept as an explicit opt-in artifact.
-                await context.tracing.stop(path=str(run_dir / "trace.zip"))
 
             title = await page.title()
             metadata = await page.evaluate(
@@ -129,6 +124,9 @@ class SiteCrawler:
             frames = [frame.url for frame in page.frames]
             final_url = page.url
             status = response.status if response else None
+
+            if request.trace:
+                await context.tracing.stop(path=str(run_dir / "trace.zip"))
             await context.close()
             await browser.close()
 
