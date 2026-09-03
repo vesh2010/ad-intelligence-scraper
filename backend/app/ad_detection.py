@@ -7,10 +7,9 @@ from urllib.parse import urlparse
 # Keep generic DOM markers token-aware. A raw substring check for "ad" produces
 # unacceptable false positives (for example, "header").
 DOM_MARKER_RE = re.compile(
-    r"(?:^|[\s_:\-/])(ads?|advert(?:isement|ising)?|sponsored|promoted)(?:$|[\s_:\-/])",
+    r"(?:^|[\s_:\-/])(ads?|advert(?:isement|ising)?|sponsored|promoted|adsbygoogle)(?:$|[\s_:\-/])",
     re.IGNORECASE,
 )
-DOM_EXACT_MARKERS = {"adsbygoogle"}
 
 KNOWN_AD_TECH = {
     "googlesyndication": "Google AdSense/Publisher",
@@ -42,10 +41,7 @@ NETWORK_PATH_MARKERS = (
 
 
 def _is_dom_ad_related(value: str) -> bool:
-    text = value.strip().lower()
-    if text in DOM_EXACT_MARKERS:
-        return True
-    return bool(DOM_MARKER_RE.search(text))
+    return bool(DOM_MARKER_RE.search(value.strip()))
 
 
 def _technology(value: str) -> str | None:
@@ -94,7 +90,6 @@ def classify_dom_candidates(candidates: list[dict[str, object]]) -> list[dict[st
     results: list[dict[str, object]] = []
     for candidate in candidates:
         values = [candidate.get(k) for k in ("id", "class_name", "aria_label", "role", "title", "text")]
-        text = " ".join(str(value or "") for value in values)
         if not any(_is_dom_ad_related(str(value or "")) for value in values):
             continue
         results.append({**candidate, "signal_type": "dom", "confidence": "medium"})
