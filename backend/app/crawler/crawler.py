@@ -45,10 +45,12 @@ class SiteCrawler:
         visual_evidence: list[dict[str, object]] = []
         ad_records = []
 
-        try:
-            ads_txt = await fetch_ads_txt(str(request.url))
-        except Exception as exc:
-            ads_txt = {"found": False, "error": f"ads.txt fetch failed: {exc}"}
+        ads_txt: dict[str, object] | None = None
+        if request.include_ads_txt:
+            try:
+                ads_txt = await fetch_ads_txt(str(request.url))
+            except Exception as exc:
+                ads_txt = {"found": False, "error": f"ads.txt fetch failed: {exc}"}
 
         async with async_playwright() as p:
             try:
@@ -146,9 +148,10 @@ class SiteCrawler:
                     json.dumps([record.model_dump() for record in ad_records], indent=2),
                     encoding="utf-8",
                 )
-                (run_dir / "ads.txt.json").write_text(
-                    json.dumps(ads_txt, indent=2), encoding="utf-8"
-                )
+                if ads_txt is not None:
+                    (run_dir / "ads.txt.json").write_text(
+                        json.dumps(ads_txt, indent=2), encoding="utf-8"
+                    )
 
                 title = await page.title()
                 metadata = await page.evaluate(
@@ -191,8 +194,9 @@ class SiteCrawler:
             "runtime_ads": str(run_dir / "runtime_ads.json"),
             "visual_evidence": str(run_dir / "visual_evidence.json"),
             "ad_records": str(run_dir / "ad_records.json"),
-            "ads_txt": str(run_dir / "ads.txt.json"),
         }
+        if ads_txt is not None:
+            artifacts["ads_txt"] = str(run_dir / "ads.txt.json")
         if request.trace:
             artifacts["trace"] = str(run_dir / "trace.zip")
 
