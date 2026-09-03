@@ -9,9 +9,10 @@ from fastapi.responses import FileResponse, HTMLResponse
 
 from .crawler.crawler import CrawlError, SiteCrawler
 from .crawler.models import CrawlRequest, CrawlResult, SiteCrawlRequest, SiteCrawlResult
+from .dual_device_crawl import crawl_both_devices
 from .site_crawl import crawl_site
 
-app = FastAPI(title="Ad Intelligence Scraper", version="0.3.0")
+app = FastAPI(title="Ad Intelligence Scraper", version="0.4.0")
 crawler = SiteCrawler()
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -50,6 +51,16 @@ async def crawl(request: CrawlRequest) -> CrawlResult:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Crawl failed: {exc}") from exc
+
+
+@app.post("/api/crawl/both-devices")
+async def crawl_both(request: CrawlRequest) -> dict[str, object]:
+    try:
+        return await crawl_both_devices(crawler, request)
+    except CrawlError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Dual-device crawl failed: {exc}") from exc
 
 
 @app.post("/api/site-crawl", response_model=SiteCrawlResult)
