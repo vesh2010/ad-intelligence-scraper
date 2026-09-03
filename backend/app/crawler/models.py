@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field, HttpUrl
 
+from ..ad_models import AdDetectionResult
+
 
 class CrawlRequest(BaseModel):
     url: HttpUrl
@@ -26,3 +28,4 @@ class CrawlResult(BaseModel):
     page_errors: list[str]
     frames: list[str]
     artifacts: dict[str, str]
+    ad_detection: AdDetectionResult | None = None
