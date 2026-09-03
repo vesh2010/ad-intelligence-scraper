@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
 from html.parser import HTMLParser
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 
@@ -103,73 +104,91 @@ def _first_product(json_ld: list[str]) -> dict[str, Any] | None:
     return None
 
 
-async def enrich_landing_page(url: str, timeout_s: float = 8.0, max_bytes: int = 2_000_000) -> dict[str, Any]:
+def _public_destination(url: str) -> bool:
     parsed = urlparse(url)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-        return {"found": False, "requested_url": url, "error": "unsupported URL"}
-
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+        return False
+    host = parsed.hostname.lower().rstrip(".")
+    if host in {"localhost", "localhost.localdomain"} or host.endswith(".local"):
+        return False
     try:
-        async with httpx.AsyncClient(
-            follow_redirects=True,
-            timeout=timeout_s,
-            headers={"User-Agent": "AdIntelligenceScraper/0.1 (+landing metadata research)"},
-        ) as client:
-            async with client.stream("GET", url) as response:
-                chunks: list[bytes] = []
-                total = 0
-                async for chunk in response.aiter_bytes():
-                    total += len(chunk)
-                    if total > max_bytes:
-                        remaining = max_bytes - (total - len(chunk))
-                        if remaining > 0:
-                            chunks.append(chunk[:remaining])
-                        break
-                    chunks.append(chunk)
-                body = b"".join(chunks)
-                content_type = response.headers.get("content-type", "")
-                if "html" not in content_type.lower():
-                    return {
-                        "found": False,
-                        "requested_url": url,
-                        "final_url": str(response.url),
-                        "status": response.status_code,
-                        "error": f"non-HTML content: {content_type or 'unknown'}",
-                    }
-                encoding = response.encoding or "utf-8"
-                text = body.decode(encoding, errors="replace")
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return True
+    return not (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved)
 
-        parser = _MetadataParser()
-        parser.feed(text)
-        product = _first_product(parser.json_ld)
-        title = re.sub(r"\s+", " ", "".join(parser.title_parts)).strip() or None
-        result: dict[str, Any] = {
-            "found": response.is_success,
-            "requested_url": url,
-            "final_url": str(response.url),
-            "status": response.status_code,
-            "title": title,
-            "canonical": parser.canonical,
-            "description": _meta(parser, "description"),
-            "og_title": _meta(parser, "og:title"),
-            "og_description": _meta(parser, "og:description"),
-            "og_image": _meta(parser, "og:image"),
-            "product": None,
-            "source": "landing_page",
+
+async def enrich_landing_page(url: str, timeout_s: float = 8.0, max_bytes: int = 2_000_000) -> dict[str, Any]:
+    """Extract public landing-page metadata with bounded, validated redirects."""
+    if not _public_destination(url):
+        return {"found": False, "requested_url": url, "error": "destination is not a public HTTP(S) URL"}
+
+    current_url = url
+    async with httpx.AsyncClient(
+        follow_redirects=False,
+        timeout=timeout_s,
+        headers={"User-Agent": "AdIntelligenceScraper/0.1 (+landing metadata research)"},
+    ) as client:
+        try:
+            response = None
+            for _ in range(5):
+                response = await client.get(current_url)
+                if response.status_code not in {301, 302, 303, 307, 308}:
+                    break
+                location = response.headers.get("location")
+                if not location:
+                    break
+                current_url = urljoin(current_url, location)
+                if not _public_destination(current_url):
+                    return {"found": False, "requested_url": url, "error": "redirected to a non-public destination"}
+            if response is None:
+                return {"found": False, "requested_url": url, "error": "no response"}
+
+            content_type = response.headers.get("content-type", "")
+            if "html" not in content_type.lower():
+                return {
+                    "found": False,
+                    "requested_url": url,
+                    "final_url": str(response.url),
+                    "status": response.status_code,
+                    "error": f"non-HTML content: {content_type or 'unknown'}",
+                }
+            body = response.content[:max_bytes]
+            encoding = response.encoding or "utf-8"
+            text = body.decode(encoding, errors="replace")
+        except (httpx.HTTPError, UnicodeError) as exc:
+            return {"found": False, "requested_url": url, "error": str(exc)}
+
+    parser = _MetadataParser()
+    parser.feed(text)
+    product = _first_product(parser.json_ld)
+    title = re.sub(r"\s+", " ", "".join(parser.title_parts)).strip() or None
+    result: dict[str, Any] = {
+        "found": response.is_success,
+        "requested_url": url,
+        "final_url": str(response.url),
+        "status": response.status_code,
+        "title": title,
+        "canonical": parser.canonical,
+        "description": _meta(parser, "description"),
+        "og_title": _meta(parser, "og:title"),
+        "og_description": _meta(parser, "og:description"),
+        "og_image": _meta(parser, "og:image"),
+        "product": None,
+        "source": "landing_page",
+    }
+    if product:
+        offers = _as_list(product.get("offers"))
+        offer = offers[0] if offers and isinstance(offers[0], dict) else {}
+        result["product"] = {
+            "name": product.get("name"),
+            "brand": _brand_name(product.get("brand")),
+            "category": product.get("category"),
+            "sku": product.get("sku") or product.get("mpn") or product.get("gtin"),
+            "price": offer.get("price") if isinstance(offer, dict) else None,
+            "currency": offer.get("priceCurrency") if isinstance(offer, dict) else None,
+            "availability": offer.get("availability") if isinstance(offer, dict) else None,
+            "image": _as_list(product.get("image"))[0] if product.get("image") else None,
+            "description": product.get("description"),
         }
-        if product:
-            offers = _as_list(product.get("offers"))
-            offer = offers[0] if offers and isinstance(offers[0], dict) else {}
-            result["product"] = {
-                "name": product.get("name"),
-                "brand": _brand_name(product.get("brand")),
-                "category": product.get("category"),
-                "sku": product.get("sku") or product.get("mpn") or product.get("gtin"),
-                "price": offer.get("price") if isinstance(offer, dict) else None,
-                "currency": offer.get("priceCurrency") if isinstance(offer, dict) else None,
-                "availability": offer.get("availability") if isinstance(offer, dict) else None,
-                "image": _as_list(product.get("image"))[0] if product.get("image") else None,
-                "description": product.get("description"),
-            }
-        return result
-    except (httpx.HTTPError, UnicodeError) as exc:
-        return {"found": False, "requested_url": url, "error": str(exc)}
+    return result
