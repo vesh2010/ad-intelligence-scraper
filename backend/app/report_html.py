@@ -36,16 +36,13 @@ def render_html_report(observations: list[dict[str, Any]], title: str = "Ad Inte
     ) or "<tr><td colspan='3'>No competitor/brand observations.</td></tr>"
 
     change_counts = {
-        key: history.get(key, 0)
-        for key in (
-            "new_campaigns",
-            "campaigns_disappeared",
-            "creative_changes",
-            "placement_changes",
-            "device_targeting_changes",
-            "network_changes",
-            "cpm_changes",
-        )
+        "new_campaigns": history.get("new_campaigns", 0),
+        "disappeared_campaigns": history.get("disappeared_campaigns", 0),
+        "creative_changes": history.get("creative_changes", 0),
+        "placement_changes": history.get("placement_changes", 0),
+        "device_targeting_changes": history.get("device_targeting_changes", 0),
+        "network_changes": history.get("network_changes", 0),
+        "cpm_changes": history.get("cpm_changes", 0),
     }
     change_rows = "".join(
         f"<tr><td>{_text(key.replace('_', ' ').title())}</td><td>{value}</td></tr>"
@@ -69,7 +66,7 @@ small{{color:#666}}
 <div class="card">Observations<div class="value">{intelligence['observation_count']}</div></div>
 <div class="card">Campaigns<div class="value">{intelligence['campaigns']['campaign_count']}</div></div>
 <div class="card">Both devices<div class="value">{devices['both_device_campaigns']}</div></div>
-<div class="card">History changes<div class="value">{history.get('total_changes', 0)}</div></div>
+<div class="card">History changes<div class="value">{history.get('change_count', 0)}</div></div>
 </div>
 <h2>Campaigns</h2><table><thead><tr><th>Brand</th><th>Advertiser</th><th>Observations</th><th>Share</th><th>First seen</th><th>Last seen</th></tr></thead><tbody>{campaign_rows}</tbody></table>
 <h2>Competitor / brand frequency</h2><table><thead><tr><th>Brand</th><th>Observations</th><th>Share</th></tr></thead><tbody>{competitor_rows}</tbody></table>
