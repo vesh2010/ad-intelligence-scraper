@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field, HttpUrl
 
 from ..ad_models import AdDetectionResult
@@ -33,3 +35,4 @@ class CrawlResult(BaseModel):
     runtime_ads: dict[str, object] | None = None
     visual_evidence: list[dict[str, object]] = Field(default_factory=list)
     ad_records: list[AdRecord] = Field(default_factory=list)
+    ads_txt: dict[str, Any] | None = None
