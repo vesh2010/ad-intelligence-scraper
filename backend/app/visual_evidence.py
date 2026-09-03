@@ -31,7 +31,7 @@ async def capture_dom_ad_evidence(
     capture_assets: bool = True,
     analyze_visuals: bool = True,
 ) -> list[dict[str, Any]]:
-    """Capture screenshots, geometry, creative assets, and explainable visual signals."""
+    """Capture screenshots, geometry, and bounded image/video/audio creative assets."""
     run_dir = Path(output_dir)
     evidence_dir = run_dir / "ad_candidates"
     evidence_dir.mkdir(parents=True, exist_ok=True)
@@ -57,8 +57,12 @@ async def capture_dom_ad_evidence(
             await locator.screenshot(path=str(screenshot_path), animations="disabled")
             candidate_images = list(candidate.get("image_urls") or [])
             candidate_videos = list(candidate.get("video_urls") or [])
+            candidate_audio = list(candidate.get("audio_urls") or [])
+            candidate_posters = list(candidate.get("video_posters") or [])
             asset_urls.extend(candidate_images)
             asset_urls.extend(candidate_videos)
+            asset_urls.extend(candidate_audio)
+            asset_urls.extend(candidate_posters)
             results.append({
                 "candidate_index": index,
                 "frame_index": candidate.get("frame_index", 0),
@@ -72,6 +76,8 @@ async def capture_dom_ad_evidence(
                 "hrefs": candidate.get("hrefs", []),
                 "image_urls": candidate_images,
                 "video_urls": candidate_videos,
+                "audio_urls": candidate_audio,
+                "video_posters": candidate_posters,
                 "bbox": {
                     "x": round(box["x"]),
                     "y": round(box["y"]),
@@ -92,11 +98,13 @@ async def capture_dom_ad_evidence(
     assets = await capture_creative_assets(asset_urls, run_dir) if capture_assets else []
     asset_by_url = {str(item["url"]): item for item in assets if item.get("url")}
     for item in results:
-        item["creative_assets"] = [
-            asset_by_url[url]
-            for url in [*(item.get("image_urls") or []), *(item.get("video_urls") or [])]
-            if url in asset_by_url
+        urls = [
+            *(item.get("image_urls") or []),
+            *(item.get("video_urls") or []),
+            *(item.get("audio_urls") or []),
+            *(item.get("video_posters") or []),
         ]
+        item["creative_assets"] = [asset_by_url[url] for url in urls if url in asset_by_url]
         if analyze_visuals and item.get("screenshot"):
             item.update(
                 classify_visual_evidence(
