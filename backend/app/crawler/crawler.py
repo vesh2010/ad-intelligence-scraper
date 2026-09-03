@@ -11,6 +11,7 @@ from playwright.async_api import async_playwright
 from ..ad_models import AdDetectionResult
 from ..ad_pipeline import detect_ads
 from ..ad_reconcile import reconcile_ad_records
+from ..ads_txt import fetch_ads_txt
 from ..dom_extract import DOM_SCRIPT
 from ..runtime_ads import collect_runtime_ads
 from ..visual_evidence import capture_dom_ad_evidence
@@ -43,6 +44,11 @@ class SiteCrawler:
         runtime_snapshots: list[dict[str, object]] = []
         visual_evidence: list[dict[str, object]] = []
         ad_records = []
+
+        try:
+            ads_txt = await fetch_ads_txt(str(request.url))
+        except Exception as exc:
+            ads_txt = {"found": False, "error": f"ads.txt fetch failed: {exc}"}
 
         async with async_playwright() as p:
             try:
@@ -140,6 +146,9 @@ class SiteCrawler:
                     json.dumps([record.model_dump() for record in ad_records], indent=2),
                     encoding="utf-8",
                 )
+                (run_dir / "ads.txt.json").write_text(
+                    json.dumps(ads_txt, indent=2), encoding="utf-8"
+                )
 
                 title = await page.title()
                 metadata = await page.evaluate(
@@ -182,6 +191,7 @@ class SiteCrawler:
             "runtime_ads": str(run_dir / "runtime_ads.json"),
             "visual_evidence": str(run_dir / "visual_evidence.json"),
             "ad_records": str(run_dir / "ad_records.json"),
+            "ads_txt": str(run_dir / "ads.txt.json"),
         }
         if request.trace:
             artifacts["trace"] = str(run_dir / "trace.zip")
@@ -206,6 +216,7 @@ class SiteCrawler:
             runtime_ads={"snapshots": runtime_snapshots},
             visual_evidence=visual_evidence,
             ad_records=ad_records,
+            ads_txt=ads_txt,
         )
         (run_dir / "result.json").write_text(
             json.dumps(result.model_dump(), indent=2), encoding="utf-8"
