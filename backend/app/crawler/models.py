@@ -30,3 +30,4 @@ class CrawlResult(BaseModel):
     artifacts: dict[str, str]
     ad_detection: AdDetectionResult | None = None
     runtime_ads: dict[str, object] | None = None
+    visual_evidence: list[dict[str, object]] = Field(default_factory=list)
