@@ -24,6 +24,25 @@ def test_unknown_artifact_is_rejected():
     assert response.status_code == 404
 
 
+def test_history_changes_api():
+    response = client.post(
+        "/api/history/changes",
+        json={
+            "observations": [
+                {"observed_at": "2026-09-03T10:00:00Z", "campaign_key": "c1", "ad_unit_code": "top"},
+                {"observed_at": "2026-09-03T11:00:00Z", "campaign_key": "c1", "ad_unit_code": "mrec"},
+            ]
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["placement_changes"] == 1
+
+
+def test_history_changes_api_validates_observations():
+    response = client.post("/api/history/changes", json={"observations": "invalid"})
+    assert response.status_code == 422
+
+
 def test_artifact_path_cannot_escape_run_directory(tmp_path: Path):
     run_id = "0123456789abcdef0123456789abcdef"
     run_dir = tmp_path / run_id
