@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.ad_records import AdRecord
-from app.history import append_snapshot, campaign_key
+from app.history import append_snapshot, campaign_key, creative_fingerprint
 
 
 def _record(**kwargs) -> AdRecord:
@@ -23,6 +23,13 @@ def test_campaign_key_is_stable_for_same_observable_identity() -> None:
     left = _record(destination_urls=["https://example.com/product/"])
     right = _record(destination_urls=["https://example.com/product"])
     assert campaign_key(left) == campaign_key(right)
+
+
+def test_campaign_key_ignores_creative_changes() -> None:
+    first = _record(evidence=["creative:aaa"])
+    second = _record(evidence=["creative:bbb"])
+    assert campaign_key(first) == campaign_key(second)
+    assert creative_fingerprint(first) != creative_fingerprint(second)
 
 
 def test_campaign_key_changes_when_brand_or_destination_changes() -> None:
