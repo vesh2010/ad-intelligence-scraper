@@ -13,7 +13,7 @@ RUNTIME_ADS_SCRIPT = r'''
   const arr = (value) => Array.isArray(value) ? value : [];
   const out = {
     gpt: { detected: false, api_ready: false, slots: [], service_targeting: {} },
-    prebid: { detected: false, ad_units: [], bids: [], winners: [] }
+    prebid: { detected: false, ad_units: [], adserver_targeting: {}, bids: [], winners: [] }
   };
 
   const gt = window.googletag;
@@ -34,6 +34,8 @@ RUNTIME_ADS_SCRIPT = r'''
         height: s.getHeight()
       })), []),
       targeting: safe(() => {
+        const config = slot.getConfig ? slot.getConfig('targeting') : null;
+        if (config && config.targeting) return config.targeting;
         const keys = arr(slot.getTargetingKeys());
         return Object.fromEntries(keys.map(k => [k, arr(slot.getTargeting(k))]));
       }, {}),
@@ -43,6 +45,7 @@ RUNTIME_ADS_SCRIPT = r'''
           advertiser_id: r.advertiserId ?? null,
           campaign_id: r.campaignId ?? null,
           creative_id: r.creativeId ?? null,
+          creative_template_id: r.creativeTemplateId ?? null,
           line_item_id: r.lineItemId ?? null
         } : null;
       }, null)
@@ -61,6 +64,7 @@ RUNTIME_ADS_SCRIPT = r'''
       }))
     })), []);
 
+    out.prebid.adserver_targeting = safe(() => pb.getAdserverTargeting(), {});
     const responses = safe(() => pb.getBidResponses(), {});
     const winners = safe(() => pb.getAllWinningBids(), []);
     const winnerKeys = new Set(winners.map(b => `${b.adUnitCode ?? ''}|${b.bidder ?? ''}|${b.adId ?? ''}|${b.creativeId ?? ''}`));
@@ -85,9 +89,13 @@ RUNTIME_ADS_SCRIPT = r'''
           cpm: typeof b.cpm === 'number' ? b.cpm : null,
           currency: b.currency ?? null,
           net_revenue: typeof b.netRevenue === 'boolean' ? b.netRevenue : null,
+          request_timestamp: typeof b.requestTimestamp === 'number' ? b.requestTimestamp : null,
+          response_timestamp: typeof b.responseTimestamp === 'number' ? b.responseTimestamp : null,
           time_to_respond_ms: typeof b.timeToRespond === 'number' ? b.timeToRespond : null,
           media_type: b.mediaType ?? meta.mediaType ?? null,
           deal_id: b.dealId ?? null,
+          adserver_targeting: b.adserverTargeting ?? null,
+          native: b.native ?? null,
           status: b.status ?? null,
           ttl_seconds: typeof b.ttl === 'number' ? b.ttl : null,
           advertiser_domains: arr(meta.advertiserDomains),
@@ -100,6 +108,8 @@ RUNTIME_ADS_SCRIPT = r'''
           network_id: meta.networkId ?? null,
           network_name: meta.networkName ?? null,
           demand_source: meta.demandSource ?? null,
+          primary_category_id: meta.primaryCatId ?? null,
+          secondary_category_ids: arr(meta.secondaryCatIds),
           rendered: b.status === 'rendered' || winnerKeys.has(key)
         });
       });
@@ -119,6 +129,7 @@ RUNTIME_ADS_SCRIPT = r'''
         cpm: typeof b.cpm === 'number' ? b.cpm : null,
         currency: b.currency ?? null,
         deal_id: b.dealId ?? null,
+        adserver_targeting: b.adserverTargeting ?? null,
         advertiser_domains: arr(meta.advertiserDomains),
         advertiser_id: meta.advertiserId ?? null,
         advertiser_name: meta.advertiserName ?? null,
