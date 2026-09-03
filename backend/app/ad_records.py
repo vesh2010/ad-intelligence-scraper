@@ -12,6 +12,7 @@ class AdRecord(BaseModel):
 
     ad_id: str
     ad_type: str
+    ad_format: str | None = None
     advertiser_name: str | None = None
     advertiser_id: str | None = None
     brand_name: str | None = None
@@ -34,5 +35,6 @@ class AdRecord(BaseModel):
     bids: list[BidEvidence] = Field(default_factory=list)
     winning_bid: BidEvidence | None = None
     placement: dict[str, object] | None = None
+    above_fold: bool | None = None
     evidence: list[str] = Field(default_factory=list)
     confidence: float = 0.0
