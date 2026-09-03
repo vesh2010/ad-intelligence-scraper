@@ -12,6 +12,7 @@ from ..ad_models import AdDetectionResult
 from ..ad_pipeline import detect_ads
 from ..ad_reconcile import reconcile_ad_records
 from ..ads_txt import fetch_ads_txt
+from ..device_profiles import DEVICE_PROFILES
 from ..frame_dom import collect_frame_dom_candidates
 from ..landing_page import enrich_ad_records
 from ..runtime_ads import collect_runtime_ads
@@ -32,6 +33,7 @@ class SiteCrawler:
         parsed = urlparse(str(request.url))
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise ValueError("Only valid HTTP(S) URLs are supported")
+        profile = DEVICE_PROFILES[request.device]
 
         run_id = uuid.uuid4().hex
         run_dir = self.data_root / run_id
@@ -64,7 +66,10 @@ class SiteCrawler:
                 ) from exc
 
             context = await browser.new_context(
-                viewport={"width": 1440, "height": 900},
+                viewport={"width": profile.viewport_width, "height": profile.viewport_height},
+                device_scale_factor=profile.device_scale_factor,
+                is_mobile=profile.is_mobile,
+                has_touch=profile.has_touch,
                 service_workers="block",
             )
             page = await context.new_page()
@@ -296,6 +301,7 @@ class SiteCrawler:
             visual_evidence=visual_evidence,
             ad_records=ad_records,
             ads_txt=ads_txt,
+            device=request.device,
         )
         (run_dir / "result.json").write_text(
             json.dumps(result.model_dump(), indent=2), encoding="utf-8"
