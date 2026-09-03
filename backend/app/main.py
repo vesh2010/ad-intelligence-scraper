@@ -11,28 +11,23 @@ from .crawler.crawler import CrawlError, SiteCrawler
 from .crawler.models import CrawlRequest, CrawlResult, SiteCrawlRequest, SiteCrawlResult
 from .device_change import detect_history_changes
 from .dual_device_crawl import crawl_both_devices
+from .history_store import HistoryStore
 from .report_html import render_html_report
 from .report_intelligence import build_report_intelligence
 from .site_crawl import crawl_site
 
-app = FastAPI(title="Ad Intelligence Scraper", version="0.5.0")
+app = FastAPI(title="Ad Intelligence Scraper", version="0.6.0")
 crawler = SiteCrawler()
+history_store = HistoryStore()
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 RUN_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 SAFE_IMAGE_RE = re.compile(r"^ad_candidates/[A-Za-z0-9_.-]+\.(?:png|jpe?g|webp)$")
 ARTIFACTS = {
-    "html": "page.html",
-    "screenshot": "screenshot.png",
-    "network": "network.json",
-    "ads": "ads.json",
-    "runtime_ads": "runtime_ads.json",
-    "visual_evidence": "visual_evidence.json",
-    "creative_assets": "creative_assets.json",
-    "ad_records": "ad_records.json",
-    "ads_txt": "ads.txt.json",
-    "landing_enrichment": "landing_enrichment.json",
-    "trace": "trace.zip",
+    "html": "page.html", "screenshot": "screenshot.png", "network": "network.json",
+    "ads": "ads.json", "runtime_ads": "runtime_ads.json", "visual_evidence": "visual_evidence.json",
+    "creative_assets": "creative_assets.json", "ad_records": "ad_records.json", "ads_txt": "ads.txt.json",
+    "landing_enrichment": "landing_enrichment.json", "trace": "trace.zip",
 }
 
 
@@ -74,6 +69,35 @@ async def history_changes(payload: dict[str, object]) -> dict[str, object]:
     return detect_history_changes(observations)
 
 
+@app.get("/api/history/{target}")
+async def get_history(target: str) -> dict[str, object]:
+    observations = history_store.load(target)
+    return {"target": target, "observations": observations, "observation_count": len(observations)}
+
+
+@app.post("/api/history/{target}")
+async def append_history(target: str, payload: dict[str, object]) -> dict[str, object]:
+    observations = payload.get("observations")
+    if not isinstance(observations, list) or not all(isinstance(row, dict) for row in observations):
+        raise HTTPException(status_code=422, detail="observations must be a list of objects")
+    try:
+        return history_store.append(target, observations)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get("/api/history/{target}/intelligence")
+async def history_intelligence(target: str) -> dict[str, object]:
+    observations = history_store.load(target)
+    return build_report_intelligence(observations)
+
+
+@app.get("/api/history/{target}/report", response_class=HTMLResponse)
+async def history_report(target: str) -> HTMLResponse:
+    observations = history_store.load(target)
+    return HTMLResponse(render_html_report(observations, title=f"Ad Intelligence — {target}"))
+
+
 @app.post("/api/report/intelligence")
 async def report_intelligence(payload: dict[str, object]) -> dict[str, object]:
     observations = payload.get("observations")
@@ -96,16 +120,9 @@ async def report_html(payload: dict[str, object]) -> HTMLResponse:
 @app.post("/api/site-crawl", response_model=SiteCrawlResult)
 async def site_crawl(request: SiteCrawlRequest) -> SiteCrawlResult:
     try:
-        result = await crawl_site(
-            crawler=crawler,
-            root_url=str(request.url),
-            max_pages=request.max_pages,
-            max_depth=request.max_depth,
-            wait_ms=request.wait_ms,
-            timeout_ms=request.timeout_ms,
-            enrich_landing_pages=request.enrich_landing_pages,
-            max_landing_destinations=request.max_landing_destinations,
-        )
+        result = await crawl_site(crawler=crawler, root_url=str(request.url), max_pages=request.max_pages,
+            max_depth=request.max_depth, wait_ms=request.wait_ms, timeout_ms=request.timeout_ms,
+            enrich_landing_pages=request.enrich_landing_pages, max_landing_destinations=request.max_landing_destinations)
         return SiteCrawlResult.model_validate(result)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Site crawl failed: {exc}") from exc
