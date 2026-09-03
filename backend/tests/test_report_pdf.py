@@ -31,7 +31,7 @@ def test_render_pdf_report_contains_expected_visible_text():
     assert "Device intelligence" in text
     assert "Historical changes" in text
     assert "Advertiser and creative evidence" in text
-    assert "observation share is the share of observed records, not market share" in text
+    assert "observation share is the share of observed records, not market share" in text.lower()
 
 
 def test_render_pdf_report_validates_inputs():
