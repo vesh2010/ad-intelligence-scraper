@@ -8,9 +8,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 
 from .crawler.crawler import CrawlError, SiteCrawler
-from .crawler.models import CrawlRequest, CrawlResult
+from .crawler.models import CrawlRequest, CrawlResult, SiteCrawlRequest, SiteCrawlResult
+from .site_crawl import crawl_site
 
-app = FastAPI(title="Ad Intelligence Scraper", version="0.2.0")
+app = FastAPI(title="Ad Intelligence Scraper", version="0.3.0")
 crawler = SiteCrawler()
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -45,6 +46,22 @@ async def crawl(request: CrawlRequest) -> CrawlResult:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Crawl failed: {exc}") from exc
+
+
+@app.post("/api/site-crawl", response_model=SiteCrawlResult)
+async def site_crawl(request: SiteCrawlRequest) -> SiteCrawlResult:
+    try:
+        result = await crawl_site(
+            crawler=crawler,
+            root_url=str(request.url),
+            max_pages=request.max_pages,
+            max_depth=request.max_depth,
+            wait_ms=request.wait_ms,
+            timeout_ms=request.timeout_ms,
+        )
+        return SiteCrawlResult.model_validate(result)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Site crawl failed: {exc}") from exc
 
 
 @app.get("/api/runs/{run_id}", response_model=CrawlResult)
