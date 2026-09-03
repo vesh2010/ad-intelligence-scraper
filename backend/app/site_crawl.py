@@ -27,10 +27,6 @@ def extract_page_hrefs(html: str) -> list[str]:
     return parser.hrefs
 
 
-class SiteCrawlResultModel(dict):
-    """Typed enough at runtime for API serialization without coupling page results."""
-
-
 async def crawl_site(
     crawler: SiteCrawler,
     root_url: str,
@@ -50,7 +46,14 @@ async def crawl_site(
         depth, url = item
         try:
             result = await crawler.crawl(
-                CrawlRequest(url=url, wait_ms=wait_ms, timeout_ms=timeout_ms, trace=True)
+                CrawlRequest(
+                    url=url,
+                    wait_ms=wait_ms,
+                    timeout_ms=timeout_ms,
+                    trace=True,
+                    # ads.txt is site-level metadata. Fetch it only for the root page.
+                    include_ads_txt=(depth == 0),
+                )
             )
             pages.append(result)
             html_path = result.artifacts.get("html")
