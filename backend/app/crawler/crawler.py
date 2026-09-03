@@ -12,7 +12,7 @@ from ..ad_models import AdDetectionResult
 from ..ad_pipeline import detect_ads
 from ..ad_reconcile import reconcile_ad_records
 from ..ads_txt import fetch_ads_txt
-from ..dom_extract import DOM_SCRIPT
+from ..frame_dom import collect_frame_dom_candidates
 from ..landing_page import enrich_ad_records
 from ..runtime_ads import collect_runtime_ads
 from ..visual_evidence import capture_dom_ad_evidence
@@ -46,6 +46,7 @@ class SiteCrawler:
         visual_evidence: list[dict[str, object]] = []
         ad_records = []
         landing_enrichment: dict[str, dict[str, object]] = {}
+        dom_candidates: list[dict[str, object]] = []
 
         ads_txt: dict[str, object] | None = None
         if request.include_ads_txt:
@@ -147,7 +148,7 @@ class SiteCrawler:
                 )
                 await page.wait_for_timeout(request.wait_ms)
 
-                dom_candidates = await page.evaluate(DOM_SCRIPT)
+                dom_candidates = await collect_frame_dom_candidates(page)
                 network = list(network_by_request.values())
                 ad_detection = detect_ads(network, dom_candidates)
                 runtime_snapshots.append(
@@ -160,7 +161,7 @@ class SiteCrawler:
 
                 await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                 await page.wait_for_timeout(min(request.wait_ms, 1500))
-                dom_candidates_after_scroll = await page.evaluate(DOM_SCRIPT)
+                dom_candidates_after_scroll = await collect_frame_dom_candidates(page)
                 network = list(network_by_request.values())
                 scroll_detection = detect_ads(network, dom_candidates_after_scroll)
                 ad_detection = self._merge_detection(ad_detection, scroll_detection)
@@ -306,7 +307,15 @@ class SiteCrawler:
         seen = set()
         signals = []
         for signal in [*left.signals, *right.signals]:
-            key = (signal.signal_type, signal.url, signal.id, signal.host, signal.ad_technology)
+            key = (
+                signal.signal_type,
+                signal.url,
+                signal.id,
+                signal.host,
+                signal.ad_technology,
+                signal.frame_index,
+                signal.frame_url,
+            )
             if key in seen:
                 continue
             seen.add(key)
