@@ -28,7 +28,9 @@ def test_render_pdf_report_contains_expected_visible_text():
     assert "Ad Intelligence Report" in text
     assert "Campaign intelligence" in text
     assert "Competitor / brand frequency" in text
+    assert "Observed brand share" in text
     assert "Device intelligence" in text
+    assert "Campaign device distribution" in text
     assert "Historical changes" in text
     assert "Advertiser and creative evidence" in text
     assert "observation share is the share of observed records, not market share" in text.lower()
