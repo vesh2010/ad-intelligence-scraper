@@ -41,6 +41,13 @@ def test_dom_ad_candidate_signal():
     assert result[0]["signal_type"] == "dom"
 
 
+def test_dom_adsbygoogle_signal():
+    result = classify_dom_candidates([
+        {"id": None, "class_name": "adsbygoogle", "aria_label": None, "text": ""}
+    ])
+    assert len(result) == 1
+
+
 def test_dom_sponsored_marker_signal():
     result = classify_dom_candidates([
         {"id": "promo", "class_name": "article-card", "aria_label": "Sponsored", "text": "Brand message"}
