@@ -14,6 +14,8 @@ class CrawlRequest(BaseModel):
     timeout_ms: int = Field(default=30000, ge=1000, le=120000)
     trace: bool = True
     include_ads_txt: bool = True
+    enrich_landing_pages: bool = False
+    max_landing_destinations: int = Field(default=10, ge=1, le=25)
 
 
 class CrawlResult(BaseModel):
@@ -45,6 +47,8 @@ class SiteCrawlRequest(BaseModel):
     max_depth: int = Field(default=2, ge=0, le=10)
     wait_ms: int = Field(default=1500, ge=0, le=30000)
     timeout_ms: int = Field(default=30000, ge=1000, le=120000)
+    enrich_landing_pages: bool = False
+    max_landing_destinations: int = Field(default=10, ge=1, le=25)
 
 
 class SiteCrawlResult(BaseModel):
