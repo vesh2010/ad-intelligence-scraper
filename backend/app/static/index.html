@@ -13,8 +13,9 @@
     .sub { color: #6b7280; margin-bottom: 22px; }
     .card { background: white; border: 1px solid #e5e7eb; border-radius: 14px; padding: 18px; margin-bottom: 16px; box-shadow: 0 4px 14px rgba(0,0,0,.04); }
     label { display: block; font-weight: 600; margin-bottom: 8px; }
-    input[type=url] { width: 100%; padding: 12px 13px; border: 1px solid #d1d5db; border-radius: 10px; font-size: 15px; }
+    input[type=url], input[type=number] { width: 100%; padding: 12px 13px; border: 1px solid #d1d5db; border-radius: 10px; font-size: 15px; }
     .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .row > * { min-width: 0; }
     button { border: 0; border-radius: 10px; padding: 11px 16px; cursor: pointer; font-weight: 700; background: #111827; color: white; }
     button:disabled { opacity: .5; cursor: wait; }
     .status { margin-top: 12px; font-weight: 700; }
@@ -28,6 +29,7 @@
     pre { overflow: auto; max-height: 380px; background: #111827; color: #e5e7eb; padding: 14px; border-radius: 10px; font-size: 12px; }
     img { max-width: 100%; border: 1px solid #e5e7eb; border-radius: 10px; }
     .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .hidden { display: none; }
     @media (max-width: 800px) { .two { grid-template-columns: 1fr; } }
     .error { color: #b91c1c; }
     .ok { color: #166534; }
@@ -36,14 +38,19 @@
 <body>
 <main>
   <h1>Ad Intelligence Scraper</h1>
-  <div class="sub">M2: crawl a rendered page and inspect ad, runtime, visual, and supply-chain evidence.</div>
+  <div class="sub">Crawl a rendered page or a bounded set of same-site pages and inspect ad evidence.</div>
 
   <section class="card">
     <label for="url">Website URL</label>
     <input id="url" type="url" value="https://www.ndtvprofit.com/" placeholder="https://example.com/" />
     <div class="row" style="margin-top:12px">
-      <label style="margin:0"><input id="trace" type="checkbox" checked /> Capture Playwright trace</label>
+      <label style="margin:0"><input id="modeSite" type="checkbox" /> Site crawl</label>
+      <label style="margin:0"><input id="trace" type="checkbox" checked /> Capture trace</label>
       <button id="crawl">Start crawl</button>
+    </div>
+    <div id="siteOptions" class="row hidden" style="margin-top:12px">
+      <div style="flex:1;min-width:140px"><label for="maxPages">Max pages</label><input id="maxPages" type="number" min="1" max="100" value="5" /></div>
+      <div style="flex:1;min-width:140px"><label for="maxDepth">Max depth</label><input id="maxDepth" type="number" min="0" max="10" value="1" /></div>
     </div>
     <div id="status" class="status"></div>
   </section>
@@ -63,7 +70,7 @@
       </div>
     </section>
 
-    <section class="two">
+    <section id="singleResult" class="two">
       <section class="card">
         <h3>Rendered page</h3>
         <img id="screenshot" alt="Rendered crawl screenshot" />
@@ -74,6 +81,19 @@
         <h3>Runtime</h3>
         <pre id="runtime"></pre>
       </section>
+    </section>
+
+    <section id="siteSummary" class="card hidden">
+      <h3>Site crawl summary</h3>
+      <div class="grid">
+        <div class="metric">Pages crawled<b id="sitePages">-</b></div>
+        <div class="metric">Pages failed<b id="siteFailed">-</b></div>
+        <div class="metric">Pages discovered<b id="siteDiscovered">-</b></div>
+        <div class="metric">Ad signals<b id="siteAds">-</b></div>
+        <div class="metric">Normalized records<b id="siteRecords">-</b></div>
+      </div>
+      <h3>Pages</h3>
+      <div id="sitePagesTable"></div>
     </section>
 
     <section class="card">
@@ -96,11 +116,51 @@
 const $ = (id) => document.getElementById(id);
 const esc = (value) => String(value ?? '').replace(/[&<>\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\\':'&#92;','"':'&quot;'}[c]));
 
+$('modeSite').addEventListener('change', () => {
+  $('siteOptions').classList.toggle('hidden', !$('modeSite').checked);
+});
+
 function renderRecords(records) {
   if (!records.length) return '<div class="muted">No normalized records were produced.</div>';
   return `<table><thead><tr><th>Type</th><th>Advertiser</th><th>Brand</th><th>Bidder</th><th>CPM</th><th>Evidence</th></tr></thead><tbody>${records.map(r =>
     `<tr><td>${esc(r.ad_type)}</td><td>${esc(r.advertiser_name || r.advertiser_id || '-')}</td><td>${esc(r.brand_name || '-')}</td><td>${esc(r.bidder || '-')}</td><td>${esc(r.cpm != null ? `${r.cpm} ${r.currency || ''}` : '-')}</td><td>${(r.evidence || []).map(e => `<span class="pill">${esc(e)}</span>`).join('')}</td></tr>`
   ).join('')}</tbody></table>`;
+}
+
+function renderSite(data) {
+  $('siteSummary').classList.remove('hidden');
+  $('sitePages').textContent = data.pages_crawled;
+  $('siteFailed').textContent = data.pages_failed;
+  $('siteDiscovered').textContent = data.pages_discovered;
+  $('siteAds').textContent = data.ads_detected;
+  $('siteRecords').textContent = data.normalized_ad_records;
+  $('sitePagesTable').innerHTML = `<table><thead><tr><th>Page</th><th>Status</th><th>Title</th><th>Ads</th><th>Records</th></tr></thead><tbody>${(data.pages || []).map(p =>
+    `<tr><td>${esc(p.final_url)}</td><td>${esc(p.status)}</td><td>${esc(p.title)}</td><td>${p.ad_detection?.signals?.length || 0}</td><td>${p.ad_records?.length || 0}</td></tr>`
+  ).join('')}</tbody></table>`;
+  $('singleResult').classList.add('hidden');
+  const allRecords = (data.pages || []).flatMap(p => p.ad_records || []);
+  $('records').innerHTML = renderRecords(allRecords);
+  $('adsTxt').textContent = JSON.stringify(data.pages?.[0]?.ads_txt || {}, null, 2);
+  $('raw').textContent = JSON.stringify(data, null, 2);
+}
+
+function renderSingle(data) {
+  $('siteSummary').classList.add('hidden');
+  $('singleResult').classList.remove('hidden');
+  $('pageTitle').textContent = data.title || '(untitled)';
+  $('pageUrl').textContent = data.final_url;
+  $('http').textContent = data.status ?? '-';
+  $('duration').textContent = `${data.elapsed_ms} ms`;
+  $('networkSignals').textContent = data.ad_detection?.network_signal_count ?? 0;
+  $('domSignals').textContent = data.ad_detection?.dom_signal_count ?? 0;
+  $('adRecords').textContent = (data.ad_records || []).length;
+  $('visualCount').textContent = (data.visual_evidence || []).length;
+  $('technologies').innerHTML = (data.ad_detection?.technologies || []).map(x => `<span class="pill">${esc(x)}</span>`).join('') || '<span class="muted">None detected</span>';
+  $('runtime').textContent = JSON.stringify(data.runtime_ads || {}, null, 2);
+  $('adsTxt').textContent = JSON.stringify(data.ads_txt || {}, null, 2);
+  $('records').innerHTML = renderRecords(data.ad_records || []);
+  $('raw').textContent = JSON.stringify(data, null, 2);
+  $('screenshot').src = `/api/runs/${data.run_id}/artifact/screenshot`;
 }
 
 $('crawl').addEventListener('click', async () => {
@@ -109,32 +169,26 @@ $('crawl').addEventListener('click', async () => {
   if (!url) return;
   button.disabled = true;
   $('status').className = 'status';
-  $('status').textContent = 'Crawling...';
+  $('status').textContent = $('modeSite').checked ? 'Crawling site...' : 'Crawling page...';
   try {
-    const response = await fetch('/api/crawl', {
+    const site = $('modeSite').checked;
+    const body = site
+      ? { url, max_pages: Number($('maxPages').value), max_depth: Number($('maxDepth').value), wait_ms: 1500 }
+      : {url, trace: $('trace').checked};
+    const response = await fetch(site ? '/api/site-crawl' : '/api/crawl', {
       method: 'POST',
       headers: {'content-type': 'application/json'},
-      body: JSON.stringify({url, trace: $('trace').checked})
+      body: JSON.stringify(body)
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || 'Crawl failed');
     $('status').className = 'status ok';
-    $('status').textContent = `Complete: ${data.run_id}`;
+    $('status').textContent = site
+      ? `Complete: ${data.pages_crawled} pages crawled`
+      : `Complete: ${data.run_id}`;
     $('result').hidden = false;
-    $('pageTitle').textContent = data.title || '(untitled)';
-    $('pageUrl').textContent = data.final_url;
-    $('http').textContent = data.status ?? '-';
-    $('duration').textContent = `${data.elapsed_ms} ms`;
-    $('networkSignals').textContent = data.ad_detection?.network_signal_count ?? 0;
-    $('domSignals').textContent = data.ad_detection?.dom_signal_count ?? 0;
-    $('adRecords').textContent = (data.ad_records || []).length;
-    $('visualCount').textContent = (data.visual_evidence || []).length;
-    $('technologies').innerHTML = (data.ad_detection?.technologies || []).map(x => `<span class="pill">${esc(x)}</span>`).join('') || '<span class="muted">None detected</span>';
-    $('runtime').textContent = JSON.stringify(data.runtime_ads || {}, null, 2);
-    $('adsTxt').textContent = JSON.stringify(data.ads_txt || {}, null, 2);
-    $('records').innerHTML = renderRecords(data.ad_records || []);
-    $('raw').textContent = JSON.stringify(data, null, 2);
-    $('screenshot').src = `/api/runs/${data.run_id}/artifact/screenshot`;
+    if (site) renderSite(data);
+    else renderSingle(data);
   } catch (error) {
     $('status').className = 'status error';
     $('status').textContent = error.message || String(error);
