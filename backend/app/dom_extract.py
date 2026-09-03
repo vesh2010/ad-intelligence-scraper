@@ -25,11 +25,6 @@ DOM_SCRIPT = """
     return parts.join(' > ');
   };
 
-  const values = (selector, attr) => Array.from(document.querySelectorAll(selector))
-    .map(el => attr ? el.getAttribute(attr) : el.src)
-    .filter(Boolean)
-    .slice(0, 10);
-
   return Array.from(document.querySelectorAll('div, aside, section, iframe')).map((el) => {
     const r = el.getBoundingClientRect();
     const style = getComputedStyle(el);
@@ -40,11 +35,13 @@ DOM_SCRIPT = """
       ...Array.from(el.querySelectorAll('video source[src]')).map(s => s.src)
     ].filter(Boolean).slice(0, 10);
     const dataset = {};
-    for (const key of ['ad', 'adClient', 'adSlot', 'adUnit', 'googleQueryId', 'testid']) {
-      const attr = key === 'testid' ? 'data-testid' : `data-${key.replace(/[A-Z]/g, m => '-' + m.toLowerCase())}`;
+    for (const key of ['ad', 'adClient', 'adSlot', 'adUnit', 'googleQueryId']) {
+      const attr = `data-${key.replace(/[A-Z]/g, m => '-' + m.toLowerCase())}`;
       const value = el.getAttribute(attr);
       if (value) dataset[attr] = value;
     }
+    const viewport_x = Math.round(r.x);
+    const viewport_y = Math.round(r.y);
 
     return {
       tag: el.tagName.toLowerCase(),
@@ -56,8 +53,10 @@ DOM_SCRIPT = """
       text: (el.innerText || '').trim().slice(0, 240),
       width: Math.round(r.width),
       height: Math.round(r.height),
-      x: Math.round(r.x),
-      y: Math.round(r.y),
+      x: Math.round(viewport_x + window.scrollX),
+      y: Math.round(viewport_y + window.scrollY),
+      viewport_x,
+      viewport_y,
       visible: r.width > 0 && r.height > 0,
       iframe_src: el.tagName === 'IFRAME' ? el.getAttribute('src') : null,
       hrefs,
