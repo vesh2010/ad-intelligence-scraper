@@ -1,4 +1,4 @@
-from app.landing_page import _MetadataParser, _first_product, parse_ads_txt
+from app.landing_page import _MetadataParser, _first_product
 
 
 def test_landing_parser_extracts_product_jsonld():
@@ -23,7 +23,7 @@ def test_landing_parser_extracts_product_jsonld():
 
     product = _first_product(parser.json_ld)
 
-    assert "Example Phone" == product["name"]
+    assert product["name"] == "Example Phone"
     assert product["brand"]["name"] == "Example"
     assert parser.canonical.endswith("/product/phone")
     assert parser.meta[("property", "og:image")] == "https://example.com/phone.jpg"
