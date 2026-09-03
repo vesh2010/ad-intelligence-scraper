@@ -9,7 +9,9 @@ from urllib.parse import urlparse
 from playwright.async_api import async_playwright
 
 from ..ad_pipeline import detect_ads
+from ..ad_models import AdDetectionResult
 from ..dom_extract import DOM_SCRIPT
+from ..runtime_ads import RUNTIME_ADS_SCRIPT
 from .models import CrawlRequest, CrawlResult
 from .security import redact_headers
 
@@ -35,6 +37,8 @@ class SiteCrawler:
         redirects: list[dict[str, str | int | None]] = []
         console_errors: list[str] = []
         page_errors: list[str] = []
+        ad_detection = AdDetectionResult()
+        runtime_ads: dict[str, object] = {}
 
         async with async_playwright() as p:
             try:
@@ -104,7 +108,9 @@ class SiteCrawler:
                 })""")
                 dom_candidates = await page.evaluate(DOM_SCRIPT)
                 ad_detection = detect_ads(network, dom_candidates)
+                runtime_ads = await page.evaluate(RUNTIME_ADS_SCRIPT)
                 (run_dir / "ads.json").write_text(json.dumps(ad_detection.model_dump(), indent=2), encoding="utf-8")
+                (run_dir / "runtime_ads.json").write_text(json.dumps(runtime_ads, indent=2), encoding="utf-8")
                 frames = [frame.url for frame in page.frames]
                 final_url = page.url
                 status = response.status if response else None
@@ -115,7 +121,12 @@ class SiteCrawler:
                 await browser.close()
 
         elapsed_ms = round((time.perf_counter() - started) * 1000)
-        artifacts = {"html": str(run_dir / "page.html"), "screenshot": str(run_dir / "screenshot.png"), "ads": str(run_dir / "ads.json")}
+        artifacts = {
+            "html": str(run_dir / "page.html"),
+            "screenshot": str(run_dir / "screenshot.png"),
+            "ads": str(run_dir / "ads.json"),
+            "runtime_ads": str(run_dir / "runtime_ads.json"),
+        }
         if request.trace:
             artifacts["trace"] = str(run_dir / "trace.zip")
 
@@ -123,7 +134,7 @@ class SiteCrawler:
             run_id=run_id, requested_url=str(request.url), final_url=final_url, status=status, title=title,
             elapsed_ms=elapsed_ms, dimensions=dimensions, counts=counts, metadata=metadata,
             redirects=redirects, network=network, console_errors=console_errors, page_errors=page_errors,
-            frames=frames, artifacts=artifacts, ad_detection=ad_detection,
+            frames=frames, artifacts=artifacts, ad_detection=ad_detection, runtime_ads=runtime_ads,
         )
         (run_dir / "result.json").write_text(json.dumps(result.model_dump(), indent=2), encoding="utf-8")
         return result
