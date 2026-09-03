@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 
 from .crawler.crawler import CrawlError, SiteCrawler
 from .crawler.models import CrawlRequest, CrawlResult, SiteCrawlRequest, SiteCrawlResult
+from .device_change import detect_history_changes
 from .dual_device_crawl import crawl_both_devices
 from .site_crawl import crawl_site
 
@@ -61,6 +62,14 @@ async def crawl_both(request: CrawlRequest) -> dict[str, object]:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Dual-device crawl failed: {exc}") from exc
+
+
+@app.post("/api/history/changes")
+async def history_changes(payload: dict[str, object]) -> dict[str, object]:
+    observations = payload.get("observations")
+    if not isinstance(observations, list) or not all(isinstance(row, dict) for row in observations):
+        raise HTTPException(status_code=422, detail="observations must be a list of objects")
+    return detect_history_changes(observations)
 
 
 @app.post("/api/site-crawl", response_model=SiteCrawlResult)
