@@ -13,9 +13,18 @@ class AdSignal(BaseModel):
     status: int | None = None
     ad_technology: str | None = None
     selector: str | None = None
+    tag: str | None = None
     id: str | None = None
     class_name: str | None = None
+    aria_label: str | None = None
+    role: str | None = None
+    title: str | None = None
     text: str | None = None
+    width: int | None = None
+    height: int | None = None
+    x: int | None = None
+    y: int | None = None
+    iframe_src: str | None = None
 
 
 class AdDetectionResult(BaseModel):
