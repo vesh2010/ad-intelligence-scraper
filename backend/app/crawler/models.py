@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, HttpUrl
 
@@ -16,6 +16,7 @@ class CrawlRequest(BaseModel):
     include_ads_txt: bool = True
     enrich_landing_pages: bool = False
     max_landing_destinations: int = Field(default=10, ge=1, le=25)
+    device: Literal["desktop", "mobile"] = "desktop"
 
 
 class CrawlResult(BaseModel):
@@ -39,6 +40,7 @@ class CrawlResult(BaseModel):
     visual_evidence: list[dict[str, object]] = Field(default_factory=list)
     ad_records: list[AdRecord] = Field(default_factory=list)
     ads_txt: dict[str, Any] | None = None
+    device: Literal["desktop", "mobile"] = "desktop"
 
 
 class SiteCrawlRequest(BaseModel):
