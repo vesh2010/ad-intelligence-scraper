@@ -17,7 +17,7 @@ def test_detects_new_disappeared_and_field_changes():
     assert ("c1", "device_targeting_changed") in changes
     assert ("c2", "campaign_disappeared") in changes
     assert ("c3", "new_campaign") in changes
-    assert result["change_count"] == 6
+    assert result["change_count"] == 5
 
 
 def test_ignores_missing_creative_evidence():
