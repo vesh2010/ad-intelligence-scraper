@@ -69,13 +69,13 @@ async def history_changes(payload: dict[str, object]) -> dict[str, object]:
     return detect_history_changes(observations)
 
 
-@app.get("/api/history/{target}")
+@app.get("/api/history")
 async def get_history(target: str) -> dict[str, object]:
     observations = history_store.load(target)
     return {"target": target, "observations": observations, "observation_count": len(observations)}
 
 
-@app.post("/api/history/{target}")
+@app.post("/api/history")
 async def append_history(target: str, payload: dict[str, object]) -> dict[str, object]:
     observations = payload.get("observations")
     if not isinstance(observations, list) or not all(isinstance(row, dict) for row in observations):
@@ -86,16 +86,14 @@ async def append_history(target: str, payload: dict[str, object]) -> dict[str, o
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@app.get("/api/history/{target}/intelligence")
+@app.get("/api/history/intelligence")
 async def history_intelligence(target: str) -> dict[str, object]:
-    observations = history_store.load(target)
-    return build_report_intelligence(observations)
+    return build_report_intelligence(history_store.load(target))
 
 
-@app.get("/api/history/{target}/report", response_class=HTMLResponse)
+@app.get("/api/history/report", response_class=HTMLResponse)
 async def history_report(target: str) -> HTMLResponse:
-    observations = history_store.load(target)
-    return HTMLResponse(render_html_report(observations, title=f"Ad Intelligence — {target}"))
+    return HTMLResponse(render_html_report(history_store.load(target), title=f"Ad Intelligence — {target}"))
 
 
 @app.post("/api/report/intelligence")
