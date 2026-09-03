@@ -24,6 +24,7 @@ ARTIFACTS = {
     "ads": "ads.json",
     "runtime_ads": "runtime_ads.json",
     "visual_evidence": "visual_evidence.json",
+    "creative_assets": "creative_assets.json",
     "ad_records": "ad_records.json",
     "ads_txt": "ads.txt.json",
     "landing_enrichment": "landing_enrichment.json",
