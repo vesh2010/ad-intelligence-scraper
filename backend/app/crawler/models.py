@@ -13,6 +13,7 @@ class CrawlRequest(BaseModel):
     wait_ms: int = Field(default=2000, ge=0, le=30000)
     timeout_ms: int = Field(default=30000, ge=1000, le=120000)
     trace: bool = True
+    include_ads_txt: bool = True
 
 
 class CrawlResult(BaseModel):
