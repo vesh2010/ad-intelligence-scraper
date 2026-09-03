@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from .crawler.crawler import CrawlError, SiteCrawler
 from .crawler.models import CrawlRequest, CrawlResult, SiteCrawlRequest, SiteCrawlResult
@@ -15,9 +15,10 @@ from .history_orchestration import persist_crawl_result, persist_dual_crawl_resu
 from .history_store import HistoryStore
 from .report_html import render_html_report
 from .report_intelligence import build_report_intelligence
+from .report_pdf import render_pdf_report
 from .site_crawl import crawl_site
 
-app = FastAPI(title="Ad Intelligence Scraper", version="0.7.0")
+app = FastAPI(title="Ad Intelligence Scraper", version="0.8.0")
 crawler = SiteCrawler()
 history_store = HistoryStore()
 BASE_DIR = Path(__file__).resolve().parent
@@ -64,7 +65,6 @@ async def crawl_both(request: CrawlRequest) -> dict[str, object]:
 
 @app.post("/api/monitor/crawl")
 async def monitor_crawl(request: CrawlRequest) -> dict[str, object]:
-    """Crawl once and persist normalized observations for future comparisons."""
     try:
         result = await crawler.crawl(request)
         stored = persist_crawl_result(history_store, str(request.url), result)
@@ -77,7 +77,6 @@ async def monitor_crawl(request: CrawlRequest) -> dict[str, object]:
 
 @app.post("/api/monitor/crawl/both-devices")
 async def monitor_crawl_both(request: CrawlRequest) -> dict[str, object]:
-    """Crawl desktop and mobile and persist both under one shared session."""
     try:
         result = await crawl_both_devices(crawler, request)
         stored = persist_dual_crawl_result(history_store, str(request.url), result)
@@ -123,6 +122,12 @@ async def history_report(target: str) -> HTMLResponse:
     return HTMLResponse(render_html_report(history_store.load(target), title=f"Ad Intelligence — {target}"))
 
 
+@app.get("/api/history/report.pdf")
+async def history_report_pdf(target: str) -> Response:
+    pdf = render_pdf_report(history_store.load(target), title=f"Ad Intelligence — {target}")
+    return Response(content=pdf, media_type="application/pdf", headers={"Content-Disposition": 'inline; filename="ad-intelligence-report.pdf"'})
+
+
 @app.post("/api/report/intelligence")
 async def report_intelligence(payload: dict[str, object]) -> dict[str, object]:
     observations = payload.get("observations")
@@ -140,6 +145,21 @@ async def report_html(payload: dict[str, object]) -> HTMLResponse:
     if not isinstance(title, str) or not title.strip():
         raise HTTPException(status_code=422, detail="title must be a non-empty string")
     return HTMLResponse(render_html_report(observations, title=title.strip()))
+
+
+@app.post("/api/report/pdf")
+async def report_pdf(payload: dict[str, object]) -> Response:
+    observations = payload.get("observations")
+    title = payload.get("title", "Ad Intelligence Report")
+    if not isinstance(observations, list) or not all(isinstance(row, dict) for row in observations):
+        raise HTTPException(status_code=422, detail="observations must be a list of objects")
+    if not isinstance(title, str) or not title.strip():
+        raise HTTPException(status_code=422, detail="title must be a non-empty string")
+    try:
+        pdf = render_pdf_report(observations, title=title.strip())
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return Response(content=pdf, media_type="application/pdf", headers={"Content-Disposition": 'inline; filename="ad-intelligence-report.pdf"'})
 
 
 @app.post("/api/site-crawl", response_model=SiteCrawlResult)
