@@ -13,7 +13,7 @@ def _norm(value: str | None) -> str:
 
 
 def campaign_key(record: AdRecord) -> str:
-    """Stable, evidence-based key for grouping the same observable campaign/creative."""
+    """Stable observable campaign identity; creative evidence is deliberately excluded."""
     parts = [
         _norm(record.brand_name),
         _norm(record.advertiser_name),
@@ -21,15 +21,22 @@ def campaign_key(record: AdRecord) -> str:
         _norm(record.landing_page.get("url") if record.landing_page else None),
         *sorted(_norm(url) for url in record.destination_urls),
     ]
-    creative_hashes: list[str] = []
-    for evidence in record.evidence:
-        if evidence.startswith("creative:"):
-            creative_hashes.append(evidence.removeprefix("creative:"))
-    parts.extend(sorted(creative_hashes))
     raw = "|".join(part for part in parts if part)
     if not raw:
         raw = f"{record.ad_type}|{record.ad_format}|{record.ad_unit_code}|{record.element_id}"
     return "campaign_" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:20]
+
+
+def creative_fingerprint(record: AdRecord) -> str:
+    """Return a stable fingerprint for creative evidence attached to an observation."""
+    values = [_norm(url) for url in record.creative_image_urls + record.creative_video_urls]
+    values.extend(
+        evidence.removeprefix("creative:").strip()
+        for evidence in record.evidence
+        if evidence.startswith("creative:") and evidence.removeprefix("creative:").strip()
+    )
+    raw = "|".join(sorted(set(values)))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:20] if raw else ""
 
 
 def build_snapshot(records: list[AdRecord], observed_at: str) -> list[dict[str, Any]]:
@@ -47,6 +54,7 @@ def build_snapshot(records: list[AdRecord], observed_at: str) -> list[dict[str, 
                 "ad_type": record.ad_type,
                 "ad_format": record.ad_format,
                 "ad_unit_code": record.ad_unit_code,
+                "device": getattr(record, "device", None),
                 "bidder": record.bidder,
                 "network_name": record.network_name,
                 "cpm": record.cpm,
@@ -54,6 +62,7 @@ def build_snapshot(records: list[AdRecord], observed_at: str) -> list[dict[str, 
                 "destination_urls": record.destination_urls,
                 "creative_image_urls": record.creative_image_urls,
                 "creative_video_urls": record.creative_video_urls,
+                "creative_fingerprint": creative_fingerprint(record),
                 "above_fold": record.above_fold,
                 "confidence": record.confidence,
             }
