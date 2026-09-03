@@ -10,6 +10,7 @@ from playwright.async_api import async_playwright
 
 from ..ad_models import AdDetectionResult
 from ..ad_pipeline import detect_ads
+from ..ad_reconcile import reconcile_ad_records
 from ..dom_extract import DOM_SCRIPT
 from ..runtime_ads import collect_runtime_ads
 from ..visual_evidence import capture_dom_ad_evidence
@@ -41,6 +42,7 @@ class SiteCrawler:
         ad_detection = AdDetectionResult()
         runtime_snapshots: list[dict[str, object]] = []
         visual_evidence: list[dict[str, object]] = []
+        ad_records = []
 
         async with async_playwright() as p:
             try:
@@ -120,6 +122,9 @@ class SiteCrawler:
                 visual_evidence = await capture_dom_ad_evidence(
                     page, dom_candidates_after_scroll, run_dir
                 )
+                ad_records = reconcile_ad_records(
+                    ad_detection, runtime_snapshots, visual_evidence
+                )
                 await page.evaluate("window.scrollTo(0, 0)")
 
                 html = await page.content()
@@ -130,6 +135,10 @@ class SiteCrawler:
                 )
                 (run_dir / "runtime_ads.json").write_text(
                     json.dumps(runtime_snapshots, indent=2), encoding="utf-8"
+                )
+                (run_dir / "ad_records.json").write_text(
+                    json.dumps([record.model_dump() for record in ad_records], indent=2),
+                    encoding="utf-8",
                 )
 
                 title = await page.title()
@@ -172,6 +181,7 @@ class SiteCrawler:
             "ads": str(run_dir / "ads.json"),
             "runtime_ads": str(run_dir / "runtime_ads.json"),
             "visual_evidence": str(run_dir / "visual_evidence.json"),
+            "ad_records": str(run_dir / "ad_records.json"),
         }
         if request.trace:
             artifacts["trace"] = str(run_dir / "trace.zip")
@@ -195,6 +205,7 @@ class SiteCrawler:
             ad_detection=ad_detection,
             runtime_ads={"snapshots": runtime_snapshots},
             visual_evidence=visual_evidence,
+            ad_records=ad_records,
         )
         (run_dir / "result.json").write_text(
             json.dumps(result.model_dump(), indent=2), encoding="utf-8"
