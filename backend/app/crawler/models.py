@@ -3,6 +3,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field, HttpUrl
 
 from ..ad_models import AdDetectionResult
+from ..ad_records import AdRecord
 
 
 class CrawlRequest(BaseModel):
@@ -31,3 +32,4 @@ class CrawlResult(BaseModel):
     ad_detection: AdDetectionResult | None = None
     runtime_ads: dict[str, object] | None = None
     visual_evidence: list[dict[str, object]] = Field(default_factory=list)
+    ad_records: list[AdRecord] = Field(default_factory=list)
