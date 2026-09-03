@@ -18,6 +18,30 @@ def _latest_runtime(runtime_snapshots: list[dict[str, object]]) -> dict[str, Any
     return data if isinstance(data, dict) else {"gpt": {}, "prebid": {}}
 
 
+def _placement(slot_dom: Any, evidence: dict[str, object] | None) -> dict[str, object]:
+    if slot_dom is None and evidence is None:
+        return {}
+    return {
+        "selector": getattr(slot_dom, "selector", None),
+        "x": getattr(slot_dom, "x", None),
+        "y": getattr(slot_dom, "y", None),
+        "width": getattr(slot_dom, "width", None),
+        "height": getattr(slot_dom, "height", None),
+        "position_mode": getattr(slot_dom, "position_mode", None),
+        "screenshot": evidence.get("screenshot") if evidence else None,
+    }
+
+
+def _dom_urls(slot_dom: Any) -> tuple[list[str], list[str], list[str]]:
+    if slot_dom is None:
+        return [], [], []
+    return (
+        list(getattr(slot_dom, "hrefs", []) or []),
+        list(getattr(slot_dom, "image_urls", []) or []),
+        list(getattr(slot_dom, "video_urls", []) or []),
+    )
+
+
 def reconcile_ad_records(
     ad_detection: Any,
     runtime_snapshots: list[dict[str, object]],
@@ -54,23 +78,19 @@ def reconcile_ad_records(
         slot_dom = dom_by_id.get(str(element_id)) if element_id else None
         placement = evidence_by_id.get(str(element_id)) if element_id else None
         response_info = slot.get("response_information") or {}
-        key = ["gpt", element_id, slot.get("ad_unit_path")]
+        hrefs, image_urls, video_urls = _dom_urls(slot_dom)
         record = AdRecord(
-            ad_id=_ad_id(key),
+            ad_id=_ad_id(["gpt", element_id, slot.get("ad_unit_path")]),
             ad_type="gpt_slot",
             advertiser_id=response_info.get("advertiser_id"),
             ad_unit_path=slot.get("ad_unit_path"),
             element_id=element_id,
             sizes=slot.get("sizes") or [],
             ad_server="Google Ad Manager/Google Publisher Tag",
-            placement={
-                "selector": getattr(slot_dom, "selector", None),
-                "x": getattr(slot_dom, "x", None),
-                "y": getattr(slot_dom, "y", None),
-                "width": getattr(slot_dom, "width", None),
-                "height": getattr(slot_dom, "height", None),
-                "screenshot": placement.get("screenshot") if placement else None,
-            },
+            destination_urls=hrefs,
+            creative_image_urls=image_urls,
+            creative_video_urls=video_urls,
+            placement=_placement(slot_dom, placement),
             evidence=["runtime.gpt"] + (["dom"] if slot_dom else []) + (["visual"] if placement else []),
             confidence=0.80 + (0.10 if slot_dom else 0.0) + (0.05 if response_info else 0.0),
         )
@@ -80,12 +100,17 @@ def reconcile_ad_records(
         if not isinstance(bid, dict):
             continue
         element_id = bid.get("ad_unit_code")
-        slot = next((s for s in slots if isinstance(s, dict) and s.get("element_id") == element_id), None)
+        slot = next(
+            (s for s in slots if isinstance(s, dict) and s.get("element_id") == element_id),
+            None,
+        )
         slot_dom = dom_by_id.get(str(element_id)) if element_id else None
         placement = evidence_by_id.get(str(element_id)) if element_id else None
-        key = ["prebid", bid.get("ad_unit_code"), bid.get("bidder"), bid.get("ad_id"), bid.get("creative_id")]
+        hrefs, image_urls, video_urls = _dom_urls(slot_dom)
         record = AdRecord(
-            ad_id=_ad_id(key),
+            ad_id=_ad_id(
+                ["prebid", bid.get("ad_unit_code"), bid.get("bidder"), bid.get("ad_id"), bid.get("creative_id")]
+            ),
             ad_type="prebid_bid",
             advertiser_name=bid.get("advertiser_name"),
             advertiser_id=bid.get("advertiser_id"),
@@ -93,22 +118,23 @@ def reconcile_ad_records(
             ad_unit_code=bid.get("ad_unit_code"),
             ad_unit_path=slot.get("ad_unit_path") if slot else None,
             element_id=element_id if slot_dom else None,
-            sizes=[{"width": bid["width"], "height": bid["height"]}] if bid.get("width") and bid.get("height") else [],
+            sizes=[{"width": bid["width"], "height": bid["height"]}]
+            if bid.get("width") and bid.get("height")
+            else [],
             bidder=bid.get("bidder"),
             network_name=bid.get("network_name"),
             cpm=bid.get("cpm"),
             currency=bid.get("currency"),
             deal_id=bid.get("deal_id"),
             ad_server="Google Ad Manager/Prebid" if slot else None,
-            placement={
-                "selector": getattr(slot_dom, "selector", None),
-                "x": getattr(slot_dom, "x", None),
-                "y": getattr(slot_dom, "y", None),
-                "width": getattr(slot_dom, "width", None),
-                "height": getattr(slot_dom, "height", None),
-                "screenshot": placement.get("screenshot") if placement else None,
-            },
-            evidence=["runtime.prebid"] + (["runtime.gpt"] if slot else []) + (["dom"] if slot_dom else []) + (["visual"] if placement else []),
+            destination_urls=hrefs,
+            creative_image_urls=image_urls,
+            creative_video_urls=video_urls,
+            placement=_placement(slot_dom, placement),
+            evidence=["runtime.prebid"]
+            + (["runtime.gpt"] if slot else [])
+            + (["dom"] if slot_dom else [])
+            + (["visual"] if placement else []),
             confidence=0.85 + (0.05 if slot else 0.0) + (0.05 if slot_dom else 0.0),
         )
         records[record.ad_id] = record
