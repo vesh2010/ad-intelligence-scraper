@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.main import crawler
+from app.main import crawler, history_store
 
 client = TestClient(app)
 
@@ -25,15 +25,10 @@ def test_unknown_artifact_is_rejected():
 
 
 def test_history_changes_api():
-    response = client.post(
-        "/api/history/changes",
-        json={
-            "observations": [
-                {"observed_at": "2026-09-03T10:00:00Z", "campaign_key": "c1", "ad_unit_code": "top"},
-                {"observed_at": "2026-09-03T11:00:00Z", "campaign_key": "c1", "ad_unit_code": "mrec"},
-            ]
-        },
-    )
+    response = client.post("/api/history/changes", json={"observations": [
+        {"observed_at": "2026-09-03T10:00:00Z", "campaign_key": "c1", "ad_unit_code": "top"},
+        {"observed_at": "2026-09-03T11:00:00Z", "campaign_key": "c1", "ad_unit_code": "mrec"},
+    ]})
     assert response.status_code == 200
     assert response.json()["placement_changes"] == 1
 
@@ -44,27 +39,10 @@ def test_history_changes_api_validates_observations():
 
 
 def test_report_intelligence_api():
-    response = client.post(
-        "/api/report/intelligence",
-        json={
-            "observations": [
-                {
-                    "observed_at": "2026-09-03T10:00:00Z",
-                    "campaign_key": "c1",
-                    "brand_name": "Brand A",
-                    "device": "desktop",
-                    "ad_unit_code": "top",
-                },
-                {
-                    "observed_at": "2026-09-03T11:00:00Z",
-                    "campaign_key": "c1",
-                    "brand_name": "Brand A",
-                    "device": "mobile",
-                    "ad_unit_code": "mrec",
-                },
-            ]
-        },
-    )
+    response = client.post("/api/report/intelligence", json={"observations": [
+        {"observed_at": "2026-09-03T10:00:00Z", "campaign_key": "c1", "brand_name": "Brand A", "device": "desktop", "ad_unit_code": "top"},
+        {"observed_at": "2026-09-03T11:00:00Z", "campaign_key": "c1", "brand_name": "Brand A", "device": "mobile", "ad_unit_code": "mrec"},
+    ]})
     assert response.status_code == 200
     body = response.json()
     assert body["observation_count"] == 2
@@ -74,6 +52,33 @@ def test_report_intelligence_api():
 
 def test_report_intelligence_api_validates_observations():
     response = client.post("/api/report/intelligence", json={"observations": "invalid"})
+    assert response.status_code == 422
+
+
+def test_persistent_history_api(tmp_path: Path):
+    old_root = history_store.root
+    history_store.root = tmp_path
+    target = "https://example.com/news"
+    observations = [{"observed_at": "2026-09-03T10:00:00Z", "campaign_key": "c1"}]
+    try:
+        write = client.post(f"/api/history/{target}", json={"observations": observations})
+        assert write.status_code == 200
+        assert write.json()["history_size"] == 1
+        read = client.get(f"/api/history/{target}")
+        assert read.status_code == 200
+        assert read.json()["observations"] == observations
+        intelligence = client.get(f"/api/history/{target}/intelligence")
+        assert intelligence.status_code == 200
+        assert intelligence.json()["observation_count"] == 1
+        report = client.get(f"/api/history/{target}/report")
+        assert report.status_code == 200
+        assert "Ad Intelligence" in report.text
+    finally:
+        history_store.root = old_root
+
+
+def test_persistent_history_api_validates_observations():
+    response = client.post("/api/history/example.com", json={"observations": "invalid"})
     assert response.status_code == 422
 
 
