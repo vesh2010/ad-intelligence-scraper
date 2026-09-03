@@ -34,6 +34,12 @@ DOM_SCRIPT = """
       ...Array.from(el.querySelectorAll('video[src]')).map(v => v.src),
       ...Array.from(el.querySelectorAll('video source[src]')).map(s => s.src)
     ].filter(Boolean).slice(0, 10);
+    const audio_urls = [
+      ...Array.from(el.querySelectorAll('audio[src]')).map(a => a.src),
+      ...Array.from(el.querySelectorAll('audio source[src]')).map(s => s.src)
+    ].filter(Boolean).slice(0, 10);
+    const video_posters = Array.from(el.querySelectorAll('video[poster]'))
+      .map(v => v.poster || v.getAttribute('poster')).filter(Boolean).slice(0, 5);
     const dataset = {};
     for (const key of ['ad', 'adClient', 'adSlot', 'adUnit', 'googleQueryId']) {
       const attr = `data-${key.replace(/[A-Z]/g, m => '-' + m.toLowerCase())}`;
@@ -62,6 +68,8 @@ DOM_SCRIPT = """
       hrefs,
       image_urls,
       video_urls,
+      audio_urls,
+      video_posters,
       position_mode: style.position || null,
       z_index: style.zIndex || null,
       dataset,
