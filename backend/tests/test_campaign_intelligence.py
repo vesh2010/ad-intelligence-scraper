@@ -11,6 +11,7 @@ def test_groups_observations_into_one_campaign_and_tracks_placements() -> None:
             "ad_unit_code": "top_300x250",
             "ad_format": "300x250",
             "network_name": "network-a",
+            "device": "desktop",
             "above_fold": True,
         },
         {
@@ -21,6 +22,7 @@ def test_groups_observations_into_one_campaign_and_tracks_placements() -> None:
             "ad_unit_code": "rail_300x600",
             "ad_format": "300x600",
             "network_name": "network-b",
+            "device": "mobile",
             "above_fold": False,
         },
         {
@@ -39,10 +41,12 @@ def test_groups_observations_into_one_campaign_and_tracks_placements() -> None:
     assert result["campaign_count"] == 2
     assert result["total_observations"] == 3
     assert acme["observations"] == 2
+    assert acme["observation_share_pct"] == 66.67
     assert acme["placement_count"] == 2
     assert acme["first_seen"] == "2026-09-01T10:00:00Z"
     assert acme["last_seen"] == "2026-09-03T10:00:00Z"
     assert acme["above_fold_observations"] == 1
+    assert acme["devices"] == {"desktop": 1, "mobile": 1}
     assert set(acme["formats"]) == {"300x250", "300x600"}
 
 
@@ -55,8 +59,8 @@ def test_competitor_frequency_is_ranked_by_observations() -> None:
 
     result = build_campaign_intelligence(observations)
     assert result["competitors"] == [
-        {"brand_name": "Acme", "observations": 2},
-        {"brand_name": "Beta", "observations": 1},
+        {"brand_name": "Acme", "observations": 2, "observation_share_pct": 66.67},
+        {"brand_name": "Beta", "observations": 1, "observation_share_pct": 33.33},
     ]
 
 
