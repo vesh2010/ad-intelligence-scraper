@@ -12,6 +12,7 @@ import httpx
 MAX_ASSET_BYTES = 4_000_000
 MAX_TOTAL_BYTES = 20_000_000
 DEFAULT_MAX_ASSETS = 30
+_ALLOWED_PREFIXES = ("image/", "video/", "audio/")
 
 
 def _public_destination(url: str) -> bool:
@@ -65,15 +66,27 @@ def _extension(content_type: str, url: str) -> str:
         "image/webp": ".webp",
         "image/gif": ".gif",
         "image/avif": ".avif",
+        "image/svg+xml": ".svg",
         "video/mp4": ".mp4",
         "video/webm": ".webm",
-        "image/svg+xml": ".svg",
+        "video/ogg": ".ogv",
+        "audio/mpeg": ".mp3",
+        "audio/mp3": ".mp3",
+        "audio/mp4": ".m4a",
+        "audio/aac": ".aac",
+        "audio/ogg": ".ogg",
+        "audio/wav": ".wav",
+        "audio/x-wav": ".wav",
+        "audio/webm": ".weba",
     }
     mime = content_type.split(";", 1)[0].strip().lower()
     if mime in mapping:
         return mapping[mime]
     suffix = Path(urlparse(url).path).suffix.lower()
-    return suffix if suffix in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".svg", ".mp4", ".webm"} else ".bin"
+    return suffix if suffix in {
+        ".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".svg",
+        ".mp4", ".webm", ".ogv", ".mp3", ".m4a", ".aac", ".ogg", ".wav", ".weba",
+    } else ".bin"
 
 
 async def capture_creative_assets(
@@ -84,7 +97,7 @@ async def capture_creative_assets(
     max_total_bytes: int = MAX_TOTAL_BYTES,
     timeout_s: float = 8.0,
 ) -> list[dict[str, object]]:
-    """Download bounded, public creative assets and return content hashes/metadata.
+    """Download bounded public image/video/audio creative assets.
 
     Only URLs already observed in ad DOM evidence are fetched. No cookies,
     authorization headers, request bodies, or arbitrary form submissions are used.
@@ -130,7 +143,7 @@ async def capture_creative_assets(
                     raise ValueError(f"HTTP {response.status_code}")
 
                 content_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
-                if not (content_type.startswith("image/") or content_type.startswith("video/")):
+                if not any(content_type.startswith(prefix) for prefix in _ALLOWED_PREFIXES):
                     raise ValueError(f"unsupported content type: {content_type or 'unknown'}")
                 content_length = response.headers.get("content-length")
                 if content_length and int(content_length) > max_asset_bytes:
@@ -152,6 +165,7 @@ async def capture_creative_assets(
                     "url": url,
                     "final_url": current,
                     "mime_type": content_type,
+                    "asset_kind": content_type.split("/", 1)[0],
                     "bytes": len(body),
                     "sha256": digest,
                     "path": str(path),
