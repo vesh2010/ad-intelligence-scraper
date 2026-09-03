@@ -19,4 +19,5 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements.txt
       - run: python -m playwright install --with-deps chromium
+      - run: sudo apt-get update && sudo apt-get install -y tesseract-ocr
       - run: PYTHONPATH=. python -m pytest -q
