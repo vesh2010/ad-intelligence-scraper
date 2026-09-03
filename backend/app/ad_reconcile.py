@@ -23,6 +23,8 @@ def _placement(slot_dom: Any, evidence: dict[str, object] | None) -> dict[str, o
     if slot_dom is None and evidence is None:
         return {}
     return {
+        "frame_index": getattr(slot_dom, "frame_index", 0) if slot_dom else evidence.get("frame_index", 0),
+        "frame_url": getattr(slot_dom, "frame_url", None) if slot_dom else evidence.get("frame_url"),
         "selector": getattr(slot_dom, "selector", None),
         "x": getattr(slot_dom, "x", None),
         "y": getattr(slot_dom, "y", None),
@@ -70,16 +72,20 @@ def _bid_evidence(raw: dict[str, Any]) -> BidEvidence:
     )
 
 
+def _signal_key(signal: Any) -> str:
+    return f"{getattr(signal, 'frame_index', 0)}:{getattr(signal, 'id', None) or getattr(signal, 'selector', None)}"
+
+
+def _evidence_key(item: dict[str, object]) -> str:
+    return f"{int(item.get('frame_index', 0))}:{item.get('id') or item.get('selector')}"
+
+
 def reconcile_ad_records(
     ad_detection: Any,
     runtime_snapshots: list[dict[str, object]],
     visual_evidence: list[dict[str, object]],
 ) -> list[AdRecord]:
-    """Create one observable ad/slot record and attach auction bids as evidence.
-
-    DOM-only candidates are retained as fallback records. Bid objects are never
-    counted as separate ads when they belong to a known GPT slot.
-    """
+    """Create one observable ad/slot record and attach auction bids as evidence."""
     runtime = _latest_runtime(runtime_snapshots)
     gpt = runtime.get("gpt", {}) if isinstance(runtime, dict) else {}
     prebid = runtime.get("prebid", {}) if isinstance(runtime, dict) else {}
@@ -90,44 +96,40 @@ def reconcile_ad_records(
     dom_signals = [
         signal for signal in getattr(ad_detection, "signals", []) if signal.signal_type == "dom"
     ]
-    dom_by_id = {str(signal.id): signal for signal in dom_signals if signal.id}
-    evidence_by_id = {
-        str(item.get("id")): item
+    dom_by_key = {_signal_key(signal): signal for signal in dom_signals}
+    evidence_by_key = {
+        _evidence_key(item): item
         for item in visual_evidence
-        if item.get("id")
+        if item.get("id") or item.get("selector")
     }
 
     records: list[AdRecord] = []
-    covered_ids: set[str] = set()
+    covered_keys: set[str] = set()
 
     for slot in slots if isinstance(slots, list) else []:
         if not isinstance(slot, dict):
             continue
         element_id = slot.get("element_id")
-        slot_dom = dom_by_id.get(str(element_id)) if element_id else None
-        placement = evidence_by_id.get(str(element_id)) if element_id else None
+        dom_key = f"0:{element_id}"
+        slot_dom = dom_by_key.get(dom_key) if element_id else None
+        placement = evidence_by_key.get(dom_key) if element_id else None
         response_info = slot.get("response_information") or {}
         slot_bids = [
-            _bid_evidence(b)
-            for b in bids
+            _bid_evidence(b) for b in bids
             if isinstance(b, dict) and b.get("ad_unit_code") == element_id
         ]
         slot_winners = [
-            _bid_evidence(b)
-            for b in winners
+            _bid_evidence(b) for b in winners
             if isinstance(b, dict) and b.get("ad_unit_code") == element_id
         ]
         winning = next((b for b in slot_winners if b.rendered), None) or (slot_winners[0] if slot_winners else None)
         hrefs, image_urls, video_urls = _dom_urls(slot_dom)
-        advertiser_name = winning.advertiser_name if winning else None
-        advertiser_id = response_info.get("advertiser_id") or (winning.advertiser_id if winning else None)
-        brand_name = winning.brand_name if winning else None
         record = AdRecord(
             ad_id=_ad_id(["slot", element_id, slot.get("ad_unit_path")]),
             ad_type="gpt_slot",
-            advertiser_name=advertiser_name,
-            advertiser_id=advertiser_id,
-            brand_name=brand_name,
+            advertiser_name=winning.advertiser_name if winning else None,
+            advertiser_id=response_info.get("advertiser_id") or (winning.advertiser_id if winning else None),
+            brand_name=winning.brand_name if winning else None,
             ad_unit_code=element_id,
             ad_unit_path=slot.get("ad_unit_path"),
             element_id=element_id,
@@ -145,22 +147,14 @@ def reconcile_ad_records(
             bids=slot_bids,
             winning_bid=winning,
             placement=_placement(slot_dom, placement),
-            evidence=["runtime.gpt"]
-            + (["runtime.prebid"] if slot_bids else [])
-            + (["dom"] if slot_dom else [])
-            + (["visual"] if placement else []),
+            evidence=["runtime.gpt"] + (["runtime.prebid"] if slot_bids else []) + (["dom"] if slot_dom else []) + (["visual"] if placement else []),
             confidence=min(0.98, 0.80 + (0.08 if slot_dom else 0.0) + (0.05 if response_info else 0.0) + (0.05 if winning else 0.0)),
         )
         records.append(record)
         if element_id:
-            covered_ids.add(str(element_id))
+            covered_keys.add(dom_key)
 
-    # If Prebid exposes a winner but GPT did not expose the matching slot, keep
-    # the winner as a standalone network-level record rather than losing it.
-    covered_bid_keys = {
-        (record.ad_unit_code, record.winning_bid.ad_id if record.winning_bid else None)
-        for record in records
-    }
+    covered_bid_keys = {(record.ad_unit_code, record.winning_bid.ad_id if record.winning_bid else None) for record in records}
     for raw in winners if isinstance(winners, list) else []:
         if not isinstance(raw, dict):
             continue
@@ -176,9 +170,7 @@ def reconcile_ad_records(
                 advertiser_id=bid.advertiser_id,
                 brand_name=bid.brand_name,
                 ad_unit_code=raw.get("ad_unit_code"),
-                sizes=[{"width": bid.width, "height": bid.height}]
-                if bid.width and bid.height
-                else [],
+                sizes=[{"width": bid.width, "height": bid.height}] if bid.width and bid.height else [],
                 bidder=bid.bidder,
                 network_name=bid.network_name,
                 cpm=bid.cpm,
@@ -192,23 +184,20 @@ def reconcile_ad_records(
             )
         )
 
-    # Preserve DOM-only ads that lack GPT/Prebid runtime evidence.
     seen_dom_keys: set[str] = set()
     for signal in dom_signals:
-        key = str(signal.id or signal.selector or f"{signal.x}:{signal.y}:{signal.width}:{signal.height}")
-        if key in seen_dom_keys or key in covered_ids:
+        key = _signal_key(signal)
+        if key in seen_dom_keys or key in covered_keys:
             continue
         seen_dom_keys.add(key)
         hrefs, image_urls, video_urls = _dom_urls(signal)
-        evidence = evidence_by_id.get(key)
+        evidence = evidence_by_key.get(key)
         records.append(
             AdRecord(
                 ad_id=_ad_id(["dom", key, signal.selector]),
                 ad_type="dom_candidate",
                 element_id=signal.id,
-                sizes=[{"width": signal.width, "height": signal.height}]
-                if signal.width and signal.height
-                else [],
+                sizes=[{"width": signal.width, "height": signal.height}] if signal.width and signal.height else [],
                 destination_urls=hrefs,
                 creative_image_urls=image_urls,
                 creative_video_urls=video_urls,
