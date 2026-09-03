@@ -1,4 +1,4 @@
-from app.device_change import detect_changes
+from app.device_change import detect_changes, detect_history_changes
 
 
 def test_detects_new_disappeared_and_field_changes():
@@ -20,9 +20,38 @@ def test_detects_new_disappeared_and_field_changes():
     assert result["change_count"] == 5
 
 
+def test_detects_network_cpm_and_continuation():
+    result = detect_changes(
+        [{"campaign_key": "c1", "network_name": "net-a", "cpm": 1.2}],
+        [{"campaign_key": "c1", "network_name": "net-b", "cpm": 2.4}],
+    )
+    changes = {item["change"] for item in result["changes"]}
+    assert "network_changed" in changes
+    assert "cpm_changed" in changes
+
+    unchanged = detect_changes(
+        [{"campaign_key": "c1", "network_name": "net-a", "cpm": 1.2}],
+        [{"campaign_key": "c1", "network_name": "net-a", "cpm": 1.2}],
+    )
+    assert unchanged["continued_campaigns"] == 1
+
+
+def test_detects_adjacent_persisted_snapshots():
+    result = detect_history_changes([
+        {"observed_at": "2026-09-03T10:00:00Z", "campaign_key": "c1", "ad_unit_code": "top"},
+        {"observed_at": "2026-09-03T11:00:00Z", "campaign_key": "c1", "ad_unit_code": "mrec"},
+        {"observed_at": "2026-09-03T11:00:00Z", "campaign_key": "c2"},
+    ])
+    assert result["snapshot_count"] == 2
+    assert result["observed_at"] == ["2026-09-03T10:00:00Z", "2026-09-03T11:00:00Z"]
+    assert result["placement_changes"] == 1
+    assert result["new_campaigns"] == 1
+
+
 def test_ignores_missing_creative_evidence():
     result = detect_changes(
         [{"campaign_key": "c1", "device": "desktop"}],
         [{"campaign_key": "c1", "device": "desktop"}],
     )
-    assert result["change_count"] == 0
+    assert result["change_count"] == 1
+    assert result["continued_campaigns"] == 1
