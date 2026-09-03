@@ -34,6 +34,8 @@ async def crawl_site(
     max_depth: int = 2,
     wait_ms: int = 1500,
     timeout_ms: int = 30000,
+    enrich_landing_pages: bool = False,
+    max_landing_destinations: int = 10,
 ) -> dict[str, Any]:
     queue = URLQueue(root_url, max_pages=max_pages)
     pages: list[CrawlResult] = []
@@ -51,8 +53,9 @@ async def crawl_site(
                     wait_ms=wait_ms,
                     timeout_ms=timeout_ms,
                     trace=True,
-                    # ads.txt is site-level metadata. Fetch it only for the root page.
                     include_ads_txt=(depth == 0),
+                    enrich_landing_pages=enrich_landing_pages,
+                    max_landing_destinations=max_landing_destinations,
                 )
             )
             pages.append(result)
