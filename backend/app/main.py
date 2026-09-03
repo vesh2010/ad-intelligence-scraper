@@ -11,12 +11,13 @@ from .crawler.crawler import CrawlError, SiteCrawler
 from .crawler.models import CrawlRequest, CrawlResult, SiteCrawlRequest, SiteCrawlResult
 from .device_change import detect_history_changes
 from .dual_device_crawl import crawl_both_devices
+from .history_orchestration import persist_crawl_result, persist_dual_crawl_result
 from .history_store import HistoryStore
 from .report_html import render_html_report
 from .report_intelligence import build_report_intelligence
 from .site_crawl import crawl_site
 
-app = FastAPI(title="Ad Intelligence Scraper", version="0.6.0")
+app = FastAPI(title="Ad Intelligence Scraper", version="0.7.0")
 crawler = SiteCrawler()
 history_store = HistoryStore()
 BASE_DIR = Path(__file__).resolve().parent
@@ -59,6 +60,32 @@ async def crawl_both(request: CrawlRequest) -> dict[str, object]:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Dual-device crawl failed: {exc}") from exc
+
+
+@app.post("/api/monitor/crawl")
+async def monitor_crawl(request: CrawlRequest) -> dict[str, object]:
+    """Crawl once and persist normalized observations for future comparisons."""
+    try:
+        result = await crawler.crawl(request)
+        stored = persist_crawl_result(history_store, str(request.url), result)
+        return {"crawl": result.model_dump(), "history": stored}
+    except CrawlError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Monitored crawl failed: {exc}") from exc
+
+
+@app.post("/api/monitor/crawl/both-devices")
+async def monitor_crawl_both(request: CrawlRequest) -> dict[str, object]:
+    """Crawl desktop and mobile and persist both under one shared session."""
+    try:
+        result = await crawl_both_devices(crawler, request)
+        stored = persist_dual_crawl_result(history_store, str(request.url), result)
+        return {**result, "history": stored}
+    except CrawlError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Monitored dual-device crawl failed: {exc}") from exc
 
 
 @app.post("/api/history/changes")
