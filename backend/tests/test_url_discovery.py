@@ -26,7 +26,7 @@ def test_extract_links_resolves_relative_and_filters_external():
 
 def test_url_queue_deduplicates_and_respects_page_limit():
     queue = URLQueue("https://example.com/", max_pages=3)
-    assert queue.pop() == (0, "https://example.com")
+    assert queue.pop() == (0, "https://example.com/")
     assert queue.add_links(
         "https://example.com/",
         ["/news/a", "/news/a#x", "/markets", "https://other.example/x"],
