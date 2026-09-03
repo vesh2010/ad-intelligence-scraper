@@ -55,6 +55,23 @@ def test_report_intelligence_api_validates_observations():
     assert response.status_code == 422
 
 
+def test_report_pdf_api():
+    response = client.post("/api/report/pdf", json={"title": "PDF Regression", "observations": [
+        {"observed_at": "2026-09-03T10:00:00Z", "campaign_key": "c1", "brand_name": "Brand A", "device": "desktop", "ad_unit_code": "top"},
+        {"observed_at": "2026-09-03T11:00:00Z", "campaign_key": "c1", "brand_name": "Brand A", "device": "mobile", "ad_unit_code": "mrec"},
+    ]})
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.headers["content-disposition"].startswith("inline;")
+    assert response.content.startswith(b"%PDF")
+    assert b"%EOF" in response.content
+
+
+def test_report_pdf_api_validates_observations_and_title():
+    assert client.post("/api/report/pdf", json={"observations": "invalid"}).status_code == 422
+    assert client.post("/api/report/pdf", json={"observations": [], "title": " "}).status_code == 422
+
+
 def test_persistent_history_api(tmp_path: Path):
     old_root = history_store.root
     history_store.root = tmp_path
@@ -73,6 +90,10 @@ def test_persistent_history_api(tmp_path: Path):
         report = client.get("/api/history/report", params={"target": target})
         assert report.status_code == 200
         assert "Ad Intelligence" in report.text
+        pdf = client.get("/api/history/report.pdf", params={"target": target})
+        assert pdf.status_code == 200
+        assert pdf.headers["content-type"] == "application/pdf"
+        assert pdf.content.startswith(b"%PDF")
     finally:
         history_store.root = old_root
 
