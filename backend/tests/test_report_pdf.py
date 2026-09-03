@@ -1,30 +1,13 @@
 from pathlib import Path
+from io import BytesIO
 
 from app.report_pdf import render_pdf_report
 
 
 def _observations():
     return [
-        {
-            "observed_at": "2026-09-03T10:00:00Z",
-            "campaign_key": "campaign-a",
-            "brand_name": "Brand A",
-            "advertiser_name": "Advertiser A",
-            "device": "desktop",
-            "ad_unit_code": "top",
-            "format": "display",
-            "network": "Google Ad Manager",
-        },
-        {
-            "observed_at": "2026-09-03T11:00:00Z",
-            "campaign_key": "campaign-a",
-            "brand_name": "Brand A",
-            "advertiser_name": "Advertiser A",
-            "device": "mobile",
-            "ad_unit_code": "mrec",
-            "format": "video",
-            "network": "Google Ad Manager",
-        },
+        {"observed_at": "2026-09-03T10:00:00Z", "campaign_key": "campaign-a", "brand_name": "Brand A", "advertiser_name": "Advertiser A", "device": "desktop", "ad_unit_code": "top", "format": "display", "network": "Google Ad Manager"},
+        {"observed_at": "2026-09-03T11:00:00Z", "campaign_key": "campaign-a", "brand_name": "Brand A", "advertiser_name": "Advertiser A", "device": "mobile", "ad_unit_code": "mrec", "format": "video", "network": "Google Ad Manager"},
     ]
 
 
@@ -38,13 +21,17 @@ def test_render_pdf_report_returns_valid_pdf_bytes(tmp_path: Path):
     assert output.stat().st_size == len(pdf)
 
 
-def test_render_pdf_report_includes_intelligence_labels():
-    pdf = render_pdf_report(_observations())
-    assert b"Ad Intelligence Report" in pdf
-    assert b"Campaign intelligence" in pdf
-    assert b"Competitor / brand frequency" in pdf
-    assert b"Device intelligence" in pdf
-    assert b"Historical changes" in pdf
+def test_render_pdf_report_contains_expected_visible_text():
+    from pypdf import PdfReader
+    reader = PdfReader(BytesIO(render_pdf_report(_observations())))
+    text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    assert "Ad Intelligence Report" in text
+    assert "Campaign intelligence" in text
+    assert "Competitor / brand frequency" in text
+    assert "Device intelligence" in text
+    assert "Historical changes" in text
+    assert "Advertiser and creative evidence" in text
+    assert "observation share is the share of observed records, not market share" in text
 
 
 def test_render_pdf_report_validates_inputs():
@@ -54,7 +41,6 @@ def test_render_pdf_report_validates_inputs():
         assert "observations" in str(exc)
     else:
         raise AssertionError("expected ValueError")
-
     try:
         render_pdf_report([], title=" ")
     except ValueError as exc:
