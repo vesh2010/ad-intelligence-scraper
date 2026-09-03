@@ -54,13 +54,14 @@ def classify_visual_evidence(
     bbox: dict[str, Any] | None = None,
     creative_assets: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Produce explainable visual signals without guessing advertiser identity."""
+    """Produce explainable visual/media signals without guessing advertiser identity."""
     ocr = ocr_image(screenshot)
     text = str(ocr.get("text") or "")
     words = re.findall(r"\b[\w$%&+.-]+\b", text)
     cta_count = len(_CTA_TERMS.findall(text))
     assets = creative_assets or []
     has_video = any(str(item.get("mime_type", "")).startswith("video/") for item in assets)
+    has_audio = any(str(item.get("mime_type", "")).startswith("audio/") for item in assets)
     has_image = any(str(item.get("mime_type", "")).startswith("image/") for item in assets)
 
     width = int((bbox or {}).get("width") or 0)
@@ -68,6 +69,8 @@ def classify_visual_evidence(
     aspect = round(width / height, 3) if height else None
     if has_video:
         creative_kind = "video"
+    elif has_audio and not has_image:
+        creative_kind = "audio"
     elif has_image:
         creative_kind = "image"
     elif text:
@@ -85,6 +88,8 @@ def classify_visual_evidence(
         composition = "image_only"
     elif has_video:
         composition = "video_only"
+    elif has_audio:
+        composition = "audio_only"
     else:
         composition = "unknown"
 
@@ -98,5 +103,6 @@ def classify_visual_evidence(
             "aspect_ratio": aspect,
             "has_image_asset": has_image,
             "has_video_asset": has_video,
+            "has_audio_asset": has_audio,
         },
     }
