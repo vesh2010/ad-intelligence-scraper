@@ -29,6 +29,7 @@ def build_campaign_intelligence(observations: list[dict[str, Any]]) -> dict[str,
         formats = [_text(r.get("ad_format")) for r in rows if _text(r.get("ad_format"))]
         networks = [_text(r.get("network_name")) for r in rows if _text(r.get("network_name"))]
         seen_at = [_text(r.get("observed_at")) for r in rows if _text(r.get("observed_at"))]
+        devices = Counter(_text(r.get("device")) for r in rows if _text(r.get("device")))
         brand = Counter(brands).most_common(1)[0][0] if brands else None
         advertiser = Counter(advertisers).most_common(1)[0][0] if advertisers else None
         if brand:
@@ -39,23 +40,30 @@ def build_campaign_intelligence(observations: list[dict[str, Any]]) -> dict[str,
                 "brand_name": brand,
                 "advertiser_name": advertiser,
                 "observations": len(rows),
+                "observation_share_pct": round(len(rows) / len(observations) * 100, 2) if observations else 0.0,
                 "first_seen": min(seen_at) if seen_at else None,
                 "last_seen": max(seen_at) if seen_at else None,
                 "placement_count": len(set(placements)),
                 "placements": sorted(set(placements)),
                 "formats": sorted(set(formats)),
                 "networks": sorted(set(networks)),
+                "devices": dict(sorted(devices.items())),
                 "above_fold_observations": sum(r.get("above_fold") is True for r in rows),
             }
         )
 
     campaign_rows.sort(key=lambda row: (-row["observations"], row["campaign_key"]))
+    total = len(observations)
     return {
         "campaigns": campaign_rows,
         "campaign_count": len(campaign_rows),
         "competitors": [
-            {"brand_name": brand, "observations": count}
+            {
+                "brand_name": brand,
+                "observations": count,
+                "observation_share_pct": round(count / total * 100, 2) if total else 0.0,
+            }
             for brand, count in competitor_counts.most_common()
         ],
-        "total_observations": len(observations),
+        "total_observations": total,
     }
