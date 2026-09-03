@@ -13,6 +13,7 @@ from ..ad_pipeline import detect_ads
 from ..ad_reconcile import reconcile_ad_records
 from ..ads_txt import fetch_ads_txt
 from ..dom_extract import DOM_SCRIPT
+from ..landing_page import enrich_ad_records
 from ..runtime_ads import collect_runtime_ads
 from ..visual_evidence import capture_dom_ad_evidence
 from .models import CrawlRequest, CrawlResult
@@ -44,6 +45,7 @@ class SiteCrawler:
         runtime_snapshots: list[dict[str, object]] = []
         visual_evidence: list[dict[str, object]] = []
         ad_records = []
+        landing_enrichment: dict[str, dict[str, object]] = {}
 
         ads_txt: dict[str, object] | None = None
         if request.include_ads_txt:
@@ -133,6 +135,24 @@ class SiteCrawler:
                 ad_records = reconcile_ad_records(
                     ad_detection, runtime_snapshots, visual_evidence
                 )
+                if request.enrich_landing_pages and ad_records:
+                    landing_enrichment = await enrich_ad_records(
+                        ad_records, max_destinations=request.max_landing_destinations
+                    )
+                    for record in ad_records:
+                        for destination in record.destination_urls:
+                            enriched = landing_enrichment.get(destination)
+                            if enriched:
+                                record.landing_page = enriched
+                                product = enriched.get("product")
+                                if isinstance(product, dict):
+                                    if not record.product_name and product.get("name"):
+                                        record.product_name = str(product["name"])
+                                    if not record.brand_name and product.get("brand"):
+                                        record.brand_name = str(product["brand"])
+                                if enriched.get("found"):
+                                    record.evidence = [*record.evidence, "landing_page"]
+                                break
                 await page.evaluate("window.scrollTo(0, 0)")
 
                 html = await page.content()
@@ -148,6 +168,10 @@ class SiteCrawler:
                     json.dumps([record.model_dump() for record in ad_records], indent=2),
                     encoding="utf-8",
                 )
+                if request.enrich_landing_pages:
+                    (run_dir / "landing_enrichment.json").write_text(
+                        json.dumps(landing_enrichment, indent=2), encoding="utf-8"
+                    )
                 if ads_txt is not None:
                     (run_dir / "ads.txt.json").write_text(
                         json.dumps(ads_txt, indent=2), encoding="utf-8"
@@ -195,6 +219,8 @@ class SiteCrawler:
             "visual_evidence": str(run_dir / "visual_evidence.json"),
             "ad_records": str(run_dir / "ad_records.json"),
         }
+        if request.enrich_landing_pages:
+            artifacts["landing_enrichment"] = str(run_dir / "landing_enrichment.json")
         if ads_txt is not None:
             artifacts["ads_txt"] = str(run_dir / "ads.txt.json")
         if request.trace:
