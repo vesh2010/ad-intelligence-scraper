@@ -4,6 +4,7 @@ import asyncio
 import ipaddress
 import json
 import re
+import socket
 from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -117,9 +118,39 @@ def _public_destination(url: str) -> bool:
     return not (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved)
 
 
+async def _dns_resolves_to_public_ips(url: str) -> bool:
+    parsed = urlparse(url)
+    if not parsed.hostname:
+        return False
+    try:
+        infos = await asyncio.to_thread(
+            socket.getaddrinfo,
+            parsed.hostname,
+            parsed.port or (443 if parsed.scheme == "https" else 80),
+            type=socket.SOCK_STREAM,
+        )
+    except OSError:
+        return False
+    addresses = {info[4][0] for info in infos if info and info[4]}
+    if not addresses:
+        return False
+    for address in addresses:
+        try:
+            ip = ipaddress.ip_address(address)
+        except ValueError:
+            return False
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved:
+            return False
+    return True
+
+
+async def _safe_public_destination(url: str) -> bool:
+    return _public_destination(url) and await _dns_resolves_to_public_ips(url)
+
+
 async def enrich_landing_page(url: str, timeout_s: float = 8.0, max_bytes: int = 2_000_000) -> dict[str, Any]:
     """Extract public landing-page metadata with bounded, validated redirects."""
-    if not _public_destination(url):
+    if not await _safe_public_destination(url):
         return {"found": False, "requested_url": url, "error": "destination is not a public HTTP(S) URL"}
 
     current_url = url
@@ -138,7 +169,7 @@ async def enrich_landing_page(url: str, timeout_s: float = 8.0, max_bytes: int =
                 if not location:
                     break
                 current_url = urljoin(current_url, location)
-                if not _public_destination(current_url):
+                if not await _safe_public_destination(current_url):
                     return {"found": False, "requested_url": url, "error": "redirected to a non-public destination"}
             if response is None:
                 return {"found": False, "requested_url": url, "error": "no response"}
@@ -199,7 +230,7 @@ async def enrich_ad_records(records: list[Any], max_destinations: int = 10) -> d
     seen: set[str] = set()
     for record in records:
         for url in getattr(record, "destination_urls", []) or []:
-            if url not in seen and _public_destination(url):
+            if url not in seen and await _safe_public_destination(url):
                 seen.add(url)
                 urls.append(url)
                 if len(urls) >= max_destinations:
