@@ -1,23 +1,16 @@
 from __future__ import annotations
 
+import re
 from urllib.parse import urlparse
 
-AD_KEYWORDS = (
-    "ad",
-    "ads",
-    "advert",
-    "advertisement",
-    "doubleclick",
-    "googlesyndication",
-    "googletagmanager",
-    "prebid",
-    "amazon-adsystem",
-    "adnxs",
-    "criteo",
-    "rubiconproject",
-    "pubmatic",
-    "openx",
+
+# Keep generic DOM markers token-aware. A raw substring check for "ad" produces
+# unacceptable false positives (for example, "header").
+DOM_MARKER_RE = re.compile(
+    r"(?:^|[\s_:\-/])(ads?|advert(?:isement|ising)?|sponsored|promoted)(?:$|[\s_:\-/])",
+    re.IGNORECASE,
 )
+DOM_EXACT_MARKERS = {"adsbygoogle"}
 
 KNOWN_AD_TECH = {
     "googlesyndication": "Google AdSense/Publisher",
@@ -29,12 +22,30 @@ KNOWN_AD_TECH = {
     "rubiconproject": "Magnite/Rubicon",
     "pubmatic": "PubMatic",
     "openx": "OpenX",
+    "33across": "33Across",
+    "indexexchange": "Index Exchange",
+    "sovrn": "Sovrn",
+    "sharethrough": "Sharethrough",
+    "triplelift": "TripleLift",
 }
 
+NETWORK_PATH_MARKERS = (
+    "/ads/",
+    "/ad/",
+    "/gampad/",
+    "/pagead/",
+    "/adserver",
+    "/adservice",
+    "/adsystem/",
+    "advertising",
+)
 
-def _is_ad_related(value: str) -> bool:
-    text = value.lower()
-    return any(keyword in text for keyword in AD_KEYWORDS)
+
+def _is_dom_ad_related(value: str) -> bool:
+    text = value.strip().lower()
+    if text in DOM_EXACT_MARKERS:
+        return True
+    return bool(DOM_MARKER_RE.search(text))
 
 
 def _technology(value: str) -> str | None:
@@ -45,16 +56,23 @@ def _technology(value: str) -> str | None:
     return None
 
 
+def _is_network_ad_related(url: str) -> bool:
+    if _technology(url):
+        return True
+    lower = url.lower()
+    return any(marker in lower for marker in NETWORK_PATH_MARKERS)
+
+
 def classify_network_requests(network: list[dict[str, object]]) -> list[dict[str, object]]:
     """Create conservative ad-tech signals from captured network metadata.
 
-    This intentionally reports *signals*, not proof that a particular request
-    delivered a paid impression. Creative/advertiser verification is a later stage.
+    A signal means that a request looks ad-related. It does not prove that the
+    request resulted in a paid impression or identify the final advertiser.
     """
     records: list[dict[str, object]] = []
     for item in network:
         url = str(item.get("url", ""))
-        if not _is_ad_related(url):
+        if not _is_network_ad_related(url):
             continue
         records.append(
             {
@@ -72,11 +90,12 @@ def classify_network_requests(network: list[dict[str, object]]) -> list[dict[str
 
 
 def classify_dom_candidates(candidates: list[dict[str, object]]) -> list[dict[str, object]]:
-    """Score DOM elements supplied by the browser-side extractor."""
+    """Score browser-supplied DOM elements using conservative ad markers."""
     results: list[dict[str, object]] = []
     for candidate in candidates:
-        text = " ".join(str(candidate.get(k, "")) for k in ("id", "class_name", "aria_label", "text"))
-        if not _is_ad_related(text):
+        values = [candidate.get(k) for k in ("id", "class_name", "aria_label", "role", "title", "text")]
+        text = " ".join(str(value or "") for value in values)
+        if not any(_is_dom_ad_related(str(value or "")) for value in values):
             continue
         results.append({**candidate, "signal_type": "dom", "confidence": "medium"})
     return results
