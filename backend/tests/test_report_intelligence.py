@@ -25,7 +25,9 @@ def test_report_intelligence_combines_campaign_device_and_history_views():
 
     assert result["observation_count"] == 2
     assert result["campaigns"]["campaign_count"] == 1
-    assert result["campaigns"]["competitors"] == [{"brand_name": "Brand A", "observations": 2}]
+    assert result["campaigns"]["competitors"] == [
+        {"brand_name": "Brand A", "observations": 2, "observation_share_pct": 100.0}
+    ]
     assert result["devices"]["both_device_campaigns"] == 1
     assert result["history"]["creative_changes"] == 1
     assert result["history"]["placement_changes"] == 1
