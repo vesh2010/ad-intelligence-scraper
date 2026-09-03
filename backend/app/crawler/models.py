@@ -36,3 +36,24 @@ class CrawlResult(BaseModel):
     visual_evidence: list[dict[str, object]] = Field(default_factory=list)
     ad_records: list[AdRecord] = Field(default_factory=list)
     ads_txt: dict[str, Any] | None = None
+
+
+class SiteCrawlRequest(BaseModel):
+    url: HttpUrl
+    max_pages: int = Field(default=10, ge=1, le=100)
+    max_depth: int = Field(default=2, ge=0, le=10)
+    wait_ms: int = Field(default=1500, ge=0, le=30000)
+    timeout_ms: int = Field(default=30000, ge=1000, le=120000)
+
+
+class SiteCrawlResult(BaseModel):
+    root_url: str
+    max_pages: int
+    max_depth: int
+    pages_crawled: int
+    pages_failed: int
+    pages_discovered: int
+    ads_detected: int
+    normalized_ad_records: int
+    pages: list[CrawlResult]
+    failures: list[dict[str, str]]
