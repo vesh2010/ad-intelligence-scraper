@@ -11,10 +11,11 @@ from .crawler.crawler import CrawlError, SiteCrawler
 from .crawler.models import CrawlRequest, CrawlResult, SiteCrawlRequest, SiteCrawlResult
 from .device_change import detect_history_changes
 from .dual_device_crawl import crawl_both_devices
+from .report_html import render_html_report
 from .report_intelligence import build_report_intelligence
 from .site_crawl import crawl_site
 
-app = FastAPI(title="Ad Intelligence Scraper", version="0.4.0")
+app = FastAPI(title="Ad Intelligence Scraper", version="0.5.0")
 crawler = SiteCrawler()
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -79,6 +80,17 @@ async def report_intelligence(payload: dict[str, object]) -> dict[str, object]:
     if not isinstance(observations, list) or not all(isinstance(row, dict) for row in observations):
         raise HTTPException(status_code=422, detail="observations must be a list of objects")
     return build_report_intelligence(observations)
+
+
+@app.post("/api/report/html", response_class=HTMLResponse)
+async def report_html(payload: dict[str, object]) -> HTMLResponse:
+    observations = payload.get("observations")
+    title = payload.get("title", "Ad Intelligence Report")
+    if not isinstance(observations, list) or not all(isinstance(row, dict) for row in observations):
+        raise HTTPException(status_code=422, detail="observations must be a list of objects")
+    if not isinstance(title, str) or not title.strip():
+        raise HTTPException(status_code=422, detail="title must be a non-empty string")
+    return HTMLResponse(render_html_report(observations, title=title.strip()))
 
 
 @app.post("/api/site-crawl", response_model=SiteCrawlResult)
