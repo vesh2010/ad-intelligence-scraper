@@ -37,7 +37,7 @@ class SiteCrawler:
         run_dir = self.data_root / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
         started = time.perf_counter()
-        network: list[dict[str, object]] = []
+        network_by_request: dict[int, dict[str, object]] = {}
         redirects: list[dict[str, str | int | None]] = []
         console_errors: list[str] = []
         page_errors: list[str] = []
@@ -77,15 +77,37 @@ class SiteCrawler:
             def on_page_error(exc: Exception) -> None:
                 page_errors.append(str(exc))
 
+            def on_request(request_obj) -> None:
+                network_by_request[id(request_obj)] = {
+                    "url": request_obj.url,
+                    "method": request_obj.method,
+                    "resource_type": request_obj.resource_type,
+                    "request_headers": redact_headers(request_obj.headers),
+                    "status": None,
+                    "response_headers": {},
+                    "failed": False,
+                }
+
             async def on_response(response) -> None:
                 request_obj = response.request
-                network.append(
+                item = network_by_request.setdefault(
+                    id(request_obj),
                     {
                         "url": response.url,
                         "method": request_obj.method,
                         "resource_type": request_obj.resource_type,
+                        "request_headers": {},
+                        "status": None,
+                        "response_headers": {},
+                        "failed": False,
+                    },
+                )
+                item.update(
+                    {
+                        "url": response.url,
                         "status": response.status,
-                        "headers": redact_headers(await response.all_headers()),
+                        "response_headers": redact_headers(await response.all_headers()),
+                        "failed": False,
                     }
                 )
                 source = request_obj.redirected_from
@@ -94,9 +116,28 @@ class SiteCrawler:
                         {"from": source.url, "to": response.url, "status": response.status}
                     )
 
+            def on_request_failed(request_obj) -> None:
+                item = network_by_request.setdefault(
+                    id(request_obj),
+                    {
+                        "url": request_obj.url,
+                        "method": request_obj.method,
+                        "resource_type": request_obj.resource_type,
+                        "request_headers": redact_headers(request_obj.headers),
+                        "status": None,
+                        "response_headers": {},
+                        "failed": True,
+                    },
+                )
+                item["failed"] = True
+                if request_obj.failure:
+                    item["failure_text"] = request_obj.failure
+
             page.on("console", on_console)
             page.on("pageerror", on_page_error)
+            page.on("request", on_request)
             page.on("response", on_response)
+            page.on("requestfailed", on_request_failed)
 
             try:
                 response = await page.goto(
@@ -107,6 +148,7 @@ class SiteCrawler:
                 await page.wait_for_timeout(request.wait_ms)
 
                 dom_candidates = await page.evaluate(DOM_SCRIPT)
+                network = list(network_by_request.values())
                 ad_detection = detect_ads(network, dom_candidates)
                 runtime_snapshots.append(
                     {
@@ -119,6 +161,7 @@ class SiteCrawler:
                 await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                 await page.wait_for_timeout(min(request.wait_ms, 1500))
                 dom_candidates_after_scroll = await page.evaluate(DOM_SCRIPT)
+                network = list(network_by_request.values())
                 scroll_detection = detect_ads(network, dom_candidates_after_scroll)
                 ad_detection = self._merge_detection(ad_detection, scroll_detection)
                 runtime_snapshots.append(
@@ -150,14 +193,18 @@ class SiteCrawler:
                                         record.product_name = str(product["name"])
                                     if not record.brand_name and product.get("brand"):
                                         record.brand_name = str(product["brand"])
-                                if enriched.get("found"):
+                                if enriched.get("found") and "landing_page" not in record.evidence:
                                     record.evidence = [*record.evidence, "landing_page"]
                                 break
                 await page.evaluate("window.scrollTo(0, 0)")
 
                 html = await page.content()
+                network = list(network_by_request.values())
                 await (run_dir / "page.html").write_text(html, encoding="utf-8")
                 await page.screenshot(path=str(run_dir / "screenshot.png"), full_page=True)
+                (run_dir / "network.json").write_text(
+                    json.dumps(network, indent=2), encoding="utf-8"
+                )
                 (run_dir / "ads.json").write_text(
                     json.dumps(ad_detection.model_dump(), indent=2), encoding="utf-8"
                 )
@@ -214,6 +261,7 @@ class SiteCrawler:
         artifacts = {
             "html": str(run_dir / "page.html"),
             "screenshot": str(run_dir / "screenshot.png"),
+            "network": str(run_dir / "network.json"),
             "ads": str(run_dir / "ads.json"),
             "runtime_ads": str(run_dir / "runtime_ads.json"),
             "visual_evidence": str(run_dir / "visual_evidence.json"),
