@@ -29,3 +29,4 @@ class CrawlResult(BaseModel):
     frames: list[str]
     artifacts: dict[str, str]
     ad_detection: AdDetectionResult | None = None
+    runtime_ads: dict[str, object] | None = None
