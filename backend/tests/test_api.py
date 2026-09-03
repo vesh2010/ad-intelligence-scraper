@@ -43,6 +43,40 @@ def test_history_changes_api_validates_observations():
     assert response.status_code == 422
 
 
+def test_report_intelligence_api():
+    response = client.post(
+        "/api/report/intelligence",
+        json={
+            "observations": [
+                {
+                    "observed_at": "2026-09-03T10:00:00Z",
+                    "campaign_key": "c1",
+                    "brand_name": "Brand A",
+                    "device": "desktop",
+                    "ad_unit_code": "top",
+                },
+                {
+                    "observed_at": "2026-09-03T11:00:00Z",
+                    "campaign_key": "c1",
+                    "brand_name": "Brand A",
+                    "device": "mobile",
+                    "ad_unit_code": "mrec",
+                },
+            ]
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["observation_count"] == 2
+    assert body["campaigns"]["campaign_count"] == 1
+    assert body["devices"]["both_device_campaigns"] == 1
+
+
+def test_report_intelligence_api_validates_observations():
+    response = client.post("/api/report/intelligence", json={"observations": "invalid"})
+    assert response.status_code == 422
+
+
 def test_artifact_path_cannot_escape_run_directory(tmp_path: Path):
     run_id = "0123456789abcdef0123456789abcdef"
     run_dir = tmp_path / run_id
