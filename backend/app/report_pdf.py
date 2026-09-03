@@ -8,15 +8,8 @@ from reportlab.lib.enums import TA_LEFT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
-from reportlab.platypus import (
-    KeepTogether,
-    PageBreak,
-    Paragraph,
-    SimpleDocTemplate,
-    Spacer,
-    Table,
-    TableStyle,
-)
+from reportlab.graphics.shapes import Drawing, Rect, String
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, PageBreak
 
 from .report_intelligence import build_report_intelligence
 
@@ -58,9 +51,33 @@ def _table(data: list[list[Any]], widths: list[float], styles: list[tuple[str, A
     return table
 
 
+def _bar_chart(title: str, rows: list[tuple[str, float]], width: float = 170 * mm, row_height: float = 9 * mm) -> Drawing:
+    """Create a dependency-free vector bar chart for compact PDF reporting."""
+    rows = [(str(label)[:30] or "—", max(0.0, float(value))) for label, value in rows[:8]]
+    height = 14 * mm + len(rows) * row_height
+    drawing = Drawing(width, height)
+    drawing.add(String(0, height - 5 * mm, title, fontName="Helvetica-Bold", fontSize=9))
+    if not rows:
+        drawing.add(String(0, height - 12 * mm, "No data available", fontName="Helvetica", fontSize=8))
+        return drawing
+
+    label_width = 47 * mm
+    value_width = 17 * mm
+    chart_width = max(35 * mm, width - label_width - value_width)
+    max_value = max(value for _, value in rows) or 1.0
+    y = height - 13 * mm
+    for label, value in rows:
+        drawing.add(String(0, y + 1.8 * mm, label, fontName="Helvetica", fontSize=7))
+        drawing.add(Rect(label_width, y, chart_width, 5 * mm, fillColor=colors.HexColor("#e5e7eb"), strokeColor=None))
+        drawing.add(Rect(label_width, y, chart_width * value / max_value, 5 * mm, fillColor=colors.HexColor("#374151"), strokeColor=None))
+        drawing.add(String(label_width + chart_width + 2 * mm, y + 1.8 * mm, f"{value:.1f}%", fontName="Helvetica", fontSize=7))
+        y -= row_height
+    return drawing
+
+
 def _header_footer(canvas, doc) -> None:
     canvas.saveState()
-    width, height = A4
+    width, _ = A4
     canvas.setFont("Helvetica", 7)
     canvas.setFillColor(colors.HexColor("#6b7280"))
     canvas.drawString(18 * mm, 10 * mm, "Ad Intelligence Scraper — evidence-backed report")
@@ -142,6 +159,14 @@ def render_pdf_report(observations: list[dict[str, Any]], title: str = "Ad Intel
     if len(competitor_data) == 1:
         competitor_data.append(["No competitor/brand observations.", "0", "0.0%"])
     story.append(_table(competitor_data, [110 * mm, 35 * mm, 35 * mm]))
+    chart_rows = []
+    for row in competitors[:8]:
+        try:
+            chart_rows.append((_value(row.get("brand_name")), float(row.get("observation_share_pct", 0))))
+        except (TypeError, ValueError):
+            continue
+    story.append(Spacer(1, 3 * mm))
+    story.append(_bar_chart("Observed brand share", chart_rows))
 
     story.append(PageBreak())
     story.append(Paragraph("Device intelligence", h2))
@@ -150,6 +175,14 @@ def render_pdf_report(observations: list[dict[str, Any]], title: str = "Ad Intel
                    ["Mobile-only campaigns", str(devices["mobile_only_campaigns"])],
                    ["Campaigns on both devices", str(devices["both_device_campaigns"])]]
     story.append(_table(device_data, [120 * mm, 60 * mm]))
+    device_total = devices["desktop_only_campaigns"] + devices["mobile_only_campaigns"] + devices["both_device_campaigns"]
+    if device_total:
+        story.append(Spacer(1, 4 * mm))
+        story.append(_bar_chart("Campaign device distribution", [
+            ("Desktop-only", devices["desktop_only_campaigns"] / device_total * 100),
+            ("Mobile-only", devices["mobile_only_campaigns"] / device_total * 100),
+            ("Both devices", devices["both_device_campaigns"] / device_total * 100),
+        ]))
     both = [row for row in devices.get("campaigns", []) if row.get("both_devices")]
     if both:
         story.append(Spacer(1, 4 * mm))
