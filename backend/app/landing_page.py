@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import json
 import re
@@ -32,7 +33,7 @@ class _MetadataParser(HTMLParser):
             content = attrs_dict.get("content", "").strip()
             if content and (name or prop):
                 self.meta[("name" if name else "property", name or prop)] = content
-        elif lower == "link" and attrs_dict.get("rel", "").lower() == "canonical":
+        elif lower == "link" and "canonical" in attrs_dict.get("rel", "").lower().split():
             self.canonical = attrs_dict.get("href") or None
         elif lower == "script" and attrs_dict.get("type", "").lower() == "application/ld+json":
             self.in_json_ld = True
@@ -74,10 +75,8 @@ def _find_products(value: Any) -> list[dict[str, Any]]:
             types = {str(t).lower() for t in _as_list(node_type)}
             if "product" in types:
                 products.append(node)
-            products.extend(_find_products(node.get("@graph")))
-            products.extend(_find_products(node.get("item")))
-            products.extend(_find_products(node.get("mainEntity")))
-            products.extend(_find_products(node.get("mainEntityOfPage")))
+            for key in ("@graph", "item", "mainEntity", "mainEntityOfPage"):
+                products.extend(_find_products(node.get(key)))
         elif isinstance(node, list):
             products.extend(_find_products(node))
     return products
@@ -192,3 +191,21 @@ async def enrich_landing_page(url: str, timeout_s: float = 8.0, max_bytes: int =
             "description": product.get("description"),
         }
     return result
+
+
+async def enrich_ad_records(records: list[Any], max_destinations: int = 10) -> dict[str, dict[str, Any]]:
+    """Enrich unique public ad destination URLs concurrently, with a strict cap."""
+    urls: list[str] = []
+    seen: set[str] = set()
+    for record in records:
+        for url in getattr(record, "destination_urls", []) or []:
+            if url not in seen and _public_destination(url):
+                seen.add(url)
+                urls.append(url)
+                if len(urls) >= max_destinations:
+                    break
+        if len(urls) >= max_destinations:
+            break
+
+    results = await asyncio.gather(*(enrich_landing_page(url) for url in urls))
+    return {url: result for url, result in zip(urls, results)}
