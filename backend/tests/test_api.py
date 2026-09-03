@@ -61,16 +61,16 @@ def test_persistent_history_api(tmp_path: Path):
     target = "https://example.com/news"
     observations = [{"observed_at": "2026-09-03T10:00:00Z", "campaign_key": "c1"}]
     try:
-        write = client.post(f"/api/history/{target}", json={"observations": observations})
+        write = client.post("/api/history", params={"target": target}, json={"observations": observations})
         assert write.status_code == 200
         assert write.json()["history_size"] == 1
-        read = client.get(f"/api/history/{target}")
+        read = client.get("/api/history", params={"target": target})
         assert read.status_code == 200
         assert read.json()["observations"] == observations
-        intelligence = client.get(f"/api/history/{target}/intelligence")
+        intelligence = client.get("/api/history/intelligence", params={"target": target})
         assert intelligence.status_code == 200
         assert intelligence.json()["observation_count"] == 1
-        report = client.get(f"/api/history/{target}/report")
+        report = client.get("/api/history/report", params={"target": target})
         assert report.status_code == 200
         assert "Ad Intelligence" in report.text
     finally:
@@ -78,7 +78,7 @@ def test_persistent_history_api(tmp_path: Path):
 
 
 def test_persistent_history_api_validates_observations():
-    response = client.post("/api/history/example.com", json={"observations": "invalid"})
+    response = client.post("/api/history", params={"target": "example.com"}, json={"observations": "invalid"})
     assert response.status_code == 422
 
 
