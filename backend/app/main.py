@@ -16,14 +16,17 @@ crawler = SiteCrawler()
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 RUN_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+SAFE_IMAGE_RE = re.compile(r"^ad_candidates/[A-Za-z0-9_.-]+\.(?:png|jpe?g|webp)$")
 ARTIFACTS = {
     "html": "page.html",
     "screenshot": "screenshot.png",
+    "network": "network.json",
     "ads": "ads.json",
     "runtime_ads": "runtime_ads.json",
     "visual_evidence": "visual_evidence.json",
     "ad_records": "ad_records.json",
     "ads_txt": "ads.txt.json",
+    "landing_enrichment": "landing_enrichment.json",
     "trace": "trace.zip",
 }
 
@@ -58,6 +61,8 @@ async def site_crawl(request: SiteCrawlRequest) -> SiteCrawlResult:
             max_depth=request.max_depth,
             wait_ms=request.wait_ms,
             timeout_ms=request.timeout_ms,
+            enrich_landing_pages=request.enrich_landing_pages,
+            max_landing_destinations=request.max_landing_destinations,
         )
         return SiteCrawlResult.model_validate(result)
     except Exception as exc:
@@ -89,3 +94,16 @@ async def get_artifact(run_id: str, artifact_name: str):
     if run_dir not in path.parents or not path.is_file():
         raise HTTPException(status_code=404, detail="Artifact not found")
     return FileResponse(path)
+
+
+@app.get("/api/runs/{run_id}/image")
+async def get_candidate_image(run_id: str, path: str):
+    if not RUN_ID_RE.fullmatch(run_id):
+        raise HTTPException(status_code=400, detail="Invalid run ID")
+    if not SAFE_IMAGE_RE.fullmatch(path):
+        raise HTTPException(status_code=400, detail="Invalid image path")
+    run_dir = (crawler.data_root / run_id).resolve()
+    image = (run_dir / path).resolve()
+    if run_dir not in image.parents or not image.is_file():
+        raise HTTPException(status_code=404, detail="Image not found")
+    return FileResponse(image)
