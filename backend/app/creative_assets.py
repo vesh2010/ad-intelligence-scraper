@@ -8,6 +8,8 @@ from urllib.parse import urlparse
 
 import httpx
 
+from .media_intelligence import inspect_media
+
 
 MAX_ASSET_BYTES = 4_000_000
 MAX_TOTAL_BYTES = 20_000_000
@@ -61,32 +63,15 @@ async def _safe_asset_url(url: str) -> bool:
 
 def _extension(content_type: str, url: str) -> str:
     mapping = {
-        "image/jpeg": ".jpg",
-        "image/png": ".png",
-        "image/webp": ".webp",
-        "image/gif": ".gif",
-        "image/avif": ".avif",
-        "image/svg+xml": ".svg",
-        "video/mp4": ".mp4",
-        "video/webm": ".webm",
-        "video/ogg": ".ogv",
-        "audio/mpeg": ".mp3",
-        "audio/mp3": ".mp3",
-        "audio/mp4": ".m4a",
-        "audio/aac": ".aac",
-        "audio/ogg": ".ogg",
-        "audio/wav": ".wav",
-        "audio/x-wav": ".wav",
-        "audio/webm": ".weba",
+        "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif", "image/avif": ".avif", "image/svg+xml": ".svg",
+        "video/mp4": ".mp4", "video/webm": ".webm", "video/ogg": ".ogv",
+        "audio/mpeg": ".mp3", "audio/mp3": ".mp3", "audio/mp4": ".m4a", "audio/aac": ".aac", "audio/ogg": ".ogg", "audio/wav": ".wav", "audio/x-wav": ".wav", "audio/webm": ".weba",
     }
     mime = content_type.split(";", 1)[0].strip().lower()
     if mime in mapping:
         return mapping[mime]
     suffix = Path(urlparse(url).path).suffix.lower()
-    return suffix if suffix in {
-        ".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".svg",
-        ".mp4", ".webm", ".ogv", ".mp3", ".m4a", ".aac", ".ogg", ".wav", ".weba",
-    } else ".bin"
+    return suffix if suffix in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".svg", ".mp4", ".webm", ".ogv", ".mp3", ".m4a", ".aac", ".ogg", ".wav", ".weba"} else ".bin"
 
 
 async def capture_creative_assets(
@@ -97,11 +82,7 @@ async def capture_creative_assets(
     max_total_bytes: int = MAX_TOTAL_BYTES,
     timeout_s: float = 8.0,
 ) -> list[dict[str, object]]:
-    """Download bounded public image/video/audio creative assets.
-
-    Only URLs already observed in ad DOM evidence are fetched. No cookies,
-    authorization headers, request bodies, or arbitrary form submissions are used.
-    """
+    """Download bounded public image/video/audio creative assets and inspect media streams."""
     unique: list[str] = []
     seen: set[str] = set()
     for url in asset_urls:
@@ -161,15 +142,14 @@ async def capture_creative_assets(
                 if not path.exists():
                     path.write_bytes(body)
                 total += len(body)
-                results.append({
-                    "url": url,
-                    "final_url": current,
-                    "mime_type": content_type,
-                    "asset_kind": content_type.split("/", 1)[0],
-                    "bytes": len(body),
-                    "sha256": digest,
-                    "path": str(path),
-                })
+                item: dict[str, object] = {
+                    "url": url, "final_url": current, "mime_type": content_type,
+                    "asset_kind": content_type.split("/", 1)[0], "bytes": len(body),
+                    "sha256": digest, "path": str(path),
+                }
+                if content_type.startswith(("video/", "audio/")):
+                    item["media"] = inspect_media(path)
+                results.append(item)
             except (httpx.HTTPError, ValueError, OSError) as exc:
                 results.append({"url": url, "error": str(exc)})
 
