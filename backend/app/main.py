@@ -27,9 +27,10 @@ from .run_reports import build_run_report_router
 from .site_crawl import crawl_site
 from .site_reports import build_site_report_router
 
-crawler = SiteCrawler()
-history_store = HistoryStore()
-monitor_store = MonitorStore()
+DATA_ROOT = Path(os.getenv("AD_SCRAPER_DATA_ROOT", "data"))
+crawler = SiteCrawler(DATA_ROOT / "runs")
+history_store = HistoryStore(DATA_ROOT / "history")
+monitor_store = MonitorStore(DATA_ROOT / "monitoring")
 _scheduler_task: asyncio.Task[None] | None = None
 
 
@@ -46,25 +47,16 @@ def _scheduler_poll_seconds() -> int:
     return max(1, value)
 
 
-async def _run_monitor(target: dict[str, object]) -> dict[str, object]:
-    return await execute_monitor(
-        str(target.get("monitor_id")),
-        target,
-        crawler=crawler,
-        history_store=history_store,
-        monitor_store=monitor_store,
-    )
+def _monitor_runner(monitor_id: str, target: dict[str, object]) -> object:
+    return execute_monitor(monitor_id, target, crawler, history_store, monitor_store)
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(app: FastAPI):
     global _scheduler_task
     if _scheduler_enabled():
-        scheduler = MonitorScheduler(monitor_store, _run_monitor)
-        _scheduler_task = asyncio.create_task(
-            scheduler.start(poll_seconds=_scheduler_poll_seconds()),
-            name="ad-intelligence-monitor-scheduler",
-        )
+        scheduler = MonitorScheduler(monitor_store, _monitor_runner)
+        _scheduler_task = asyncio.create_task(asyncio.to_thread(scheduler.start, _scheduler_poll_seconds()))
     try:
         yield
     finally:
@@ -78,25 +70,32 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Ad Intelligence Scraper", version="1.0.0", lifespan=lifespan)
-app.include_router(build_monitor_router(crawler, history_store, monitor_store))
+
+ARTIFACTS = {
+    "html": "page.html",
+    "screenshot": "screenshot.png",
+    "network": "network.json",
+    "ads": "ads.json",
+    "runtime_ads": "runtime_ads.json",
+    "visual_evidence": "visual_evidence.json",
+    "creative_assets": "creative_assets.json",
+    "ad_records": "ad_records.json",
+    "ad_request_resolution": "ad_request_resolution.json",
+    "ads_txt": "ads.txt.json",
+    "landing_enrichment": "landing_enrichment.json",
+    "trace": "trace.zip",
+    "result": "result.json",
+}
+RUN_ID_RE = re.compile(r"^[a-f0-9]{32}$")
+
+app.include_router(build_monitor_router(monitor_store, crawler, history_store))
 app.include_router(build_run_report_router(lambda: crawler.data_root))
 app.include_router(build_site_report_router())
-BASE_DIR = Path(__file__).resolve().parent
-STATIC_DIR = BASE_DIR / "static"
-RUN_ID_RE = re.compile(r"^[0-9a-f]{32}$")
-SAFE_IMAGE_RE = re.compile(r"^ad_candidates/[A-Za-z0-9_.-]+\.(?:png|jpe?g|webp)$")
-ARTIFACTS = {
-    "html": "page.html", "screenshot": "screenshot.png", "network": "network.json",
-    "ads": "ads.json", "runtime_ads": "runtime_ads.json", "visual_evidence": "visual_evidence.json",
-    "creative_assets": "creative_assets.json", "ad_records": "ad_records.json",
-    "ad_request_resolution": "ad_request_resolution.json", "ads_txt": "ads.txt.json",
-    "landing_enrichment": "landing_enrichment.json", "trace": "trace.zip",
-}
 
 
-@app.get("/", response_class=HTMLResponse)
-async def home() -> str:
-    return (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+@app.get("/")
+async def index() -> FileResponse:
+    return FileResponse(Path(__file__).parent / "static" / "index.html")
 
 
 @app.get("/api/health")
@@ -257,13 +256,3 @@ async def get_artifact(run_id: str, artifact_name: str) -> FileResponse:
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Artifact not found")
     return FileResponse(path)
-
-
-@app.get("/api/runs/{run_id}/image")
-async def get_image(run_id: str, path: str) -> FileResponse:
-    if not RUN_ID_RE.fullmatch(run_id) or not SAFE_IMAGE_RE.fullmatch(path):
-        raise HTTPException(status_code=400, detail="Invalid image path")
-    image_path = crawler.data_root / run_id / path
-    if not image_path.is_file():
-        raise HTTPException(status_code=404, detail="Image not found")
-    return FileResponse(image_path)
