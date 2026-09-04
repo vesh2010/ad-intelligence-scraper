@@ -8,13 +8,17 @@ from uuid import uuid4
 
 from .device_change import detect_changes
 from .history_store import target_key
+from .sqlite_store import SQLiteStore
 
 
 class MonitorStore:
-    """JSON-backed monitoring target and alert store for single-instance deployments."""
+    """Transactional SQLite-backed monitoring target and alert store."""
 
     def __init__(self, root: str | Path = "data/monitoring") -> None:
         self.root = Path(root)
+        self.db = SQLiteStore(self.root / "monitoring.sqlite3")
+        self._initialize()
+        self._migrate_legacy_json()
 
     @property
     def path(self) -> Path:
@@ -24,50 +28,136 @@ class MonitorStore:
     def alerts_path(self) -> Path:
         return self.root / "alerts.json"
 
-    def _load(self, path: Path) -> list[dict[str, Any]]:
-        if not path.is_file():
-            return []
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return []
-        return [x for x in payload if isinstance(x, dict)] if isinstance(payload, list) else []
+    def _initialize(self) -> None:
+        with self.db.transaction() as db:
+            db.execute("""CREATE TABLE IF NOT EXISTS monitors (
+                monitor_id TEXT PRIMARY KEY,
+                target TEXT NOT NULL,
+                target_key TEXT NOT NULL,
+                device TEXT NOT NULL,
+                enabled INTEGER NOT NULL,
+                interval_minutes INTEGER NOT NULL,
+                crawl_options TEXT NOT NULL,
+                created_at TEXT,
+                updated_at TEXT,
+                last_run_at TEXT,
+                last_run_status TEXT,
+                last_error TEXT
+            )""")
+            db.execute("CREATE INDEX IF NOT EXISTS idx_monitors_target_key ON monitors(target_key)")
+            db.execute("""CREATE TABLE IF NOT EXISTS alerts (
+                alert_id TEXT PRIMARY KEY,
+                monitor_id TEXT NOT NULL,
+                target TEXT NOT NULL,
+                observed_at TEXT,
+                severity TEXT NOT NULL,
+                change_type TEXT NOT NULL,
+                campaign_key TEXT,
+                details TEXT NOT NULL,
+                FOREIGN KEY(monitor_id) REFERENCES monitors(monitor_id) ON DELETE CASCADE
+            )""")
+            db.execute("CREATE INDEX IF NOT EXISTS idx_alerts_monitor_time ON alerts(monitor_id, observed_at, alert_id)")
 
-    def _save(self, path: Path, rows: list[dict[str, Any]]) -> None:
-        self.root.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(rows, indent=2, sort_keys=True), encoding="utf-8")
-        tmp.replace(path)
+    def _migrate_legacy_json(self) -> None:
+        marker = self.root / ".sqlite_migrated"
+        if marker.exists() or not self.root.is_dir():
+            return
+        targets = []
+        alerts = []
+        try:
+            payload = json.loads(self.path.read_text(encoding="utf-8")) if self.path.is_file() else []
+            targets = [x for x in payload if isinstance(x, dict)] if isinstance(payload, list) else []
+        except (OSError, json.JSONDecodeError):
+            pass
+        try:
+            payload = json.loads(self.alerts_path.read_text(encoding="utf-8")) if self.alerts_path.is_file() else []
+            alerts = [x for x in payload if isinstance(x, dict)] if isinstance(payload, list) else []
+        except (OSError, json.JSONDecodeError):
+            pass
+        with self.db.transaction() as db:
+            for row in targets:
+                db.execute("""INSERT OR IGNORE INTO monitors
+                    (monitor_id,target,target_key,device,enabled,interval_minutes,crawl_options,created_at,updated_at,last_run_at,last_run_status,last_error)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (row.get("monitor_id"), row.get("target", ""), row.get("target_key", target_key(str(row.get("target", "")))),
+                     row.get("device", "desktop"), int(bool(row.get("enabled", True))), int(row.get("interval_minutes", 60)),
+                     self.db.encode(row.get("crawl_options", {})), row.get("created_at"), row.get("updated_at"), row.get("last_run_at"),
+                     row.get("last_run_status"), row.get("last_error")))
+            for row in alerts:
+                db.execute("""INSERT OR IGNORE INTO alerts
+                    (alert_id,monitor_id,target,observed_at,severity,change_type,campaign_key,details)
+                    VALUES(?,?,?,?,?,?,?,?)""",
+                    (row.get("alert_id", uuid4().hex), row.get("monitor_id", ""), row.get("target", ""), row.get("observed_at"),
+                     row.get("severity", "medium"), row.get("change_type", "change"), row.get("campaign_key"), self.db.encode(row.get("details", {}))))
+        try:
+            marker.write_text("sqlite", encoding="utf-8")
+        except OSError:
+            pass
+
+    @staticmethod
+    def _row(row: Any) -> dict[str, Any]:
+        result = dict(row)
+        result["enabled"] = bool(result.get("enabled"))
+        try:
+            result["crawl_options"] = json.loads(result.get("crawl_options") or "{}")
+        except json.JSONDecodeError:
+            result["crawl_options"] = {}
+        return result
 
     def list_targets(self) -> list[dict[str, Any]]:
-        return self._load(self.path)
+        with self.db.transaction() as db:
+            rows = db.execute("SELECT * FROM monitors ORDER BY created_at, monitor_id").fetchall()
+        return [self._row(row) for row in rows]
 
     def get(self, monitor_id: str) -> dict[str, Any] | None:
-        return next((x for x in self.list_targets() if x.get("monitor_id") == monitor_id), None)
+        with self.db.transaction() as db:
+            row = db.execute("SELECT * FROM monitors WHERE monitor_id=?", (monitor_id,)).fetchone()
+        return self._row(row) if row else None
 
     def upsert(self, target: dict[str, Any]) -> dict[str, Any]:
-        rows = [x for x in self.list_targets() if x.get("monitor_id") != target["monitor_id"]]
-        rows.append(dict(target))
-        self._save(self.path, rows)
-        return target
+        fields = (target["monitor_id"], target["target"], target["target_key"], target["device"], int(bool(target["enabled"])),
+                  int(target["interval_minutes"]), self.db.encode(target.get("crawl_options", {})), target.get("created_at"), target.get("updated_at"),
+                  target.get("last_run_at"), target.get("last_run_status"), target.get("last_error"))
+        with self.db.transaction() as db:
+            db.execute("""INSERT INTO monitors
+                (monitor_id,target,target_key,device,enabled,interval_minutes,crawl_options,created_at,updated_at,last_run_at,last_run_status,last_error)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(monitor_id) DO UPDATE SET target=excluded.target,target_key=excluded.target_key,device=excluded.device,
+                enabled=excluded.enabled,interval_minutes=excluded.interval_minutes,crawl_options=excluded.crawl_options,
+                created_at=excluded.created_at,updated_at=excluded.updated_at,last_run_at=excluded.last_run_at,
+                last_run_status=excluded.last_run_status,last_error=excluded.last_error""", fields)
+        return dict(target)
 
     def delete(self, monitor_id: str) -> bool:
-        rows = self.list_targets()
-        kept = [x for x in rows if x.get("monitor_id") != monitor_id]
-        if len(kept) == len(rows):
-            return False
-        self._save(self.path, kept)
-        return True
+        with self.db.transaction() as db:
+            cursor = db.execute("DELETE FROM monitors WHERE monitor_id=?", (monitor_id,))
+        return cursor.rowcount > 0
 
     def alerts(self, monitor_id: str | None = None) -> list[dict[str, Any]]:
-        rows = self._load(self.alerts_path)
-        return [x for x in rows if x.get("monitor_id") == monitor_id] if monitor_id else rows
+        with self.db.transaction() as db:
+            if monitor_id:
+                rows = db.execute("SELECT * FROM alerts WHERE monitor_id=? ORDER BY observed_at, alert_id", (monitor_id,)).fetchall()
+            else:
+                rows = db.execute("SELECT * FROM alerts ORDER BY observed_at, alert_id").fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            try:
+                item["details"] = json.loads(item.get("details") or "{}")
+            except json.JSONDecodeError:
+                item["details"] = {}
+            result.append(item)
+        return result
 
     def append_alerts(self, alerts: list[dict[str, Any]]) -> None:
-        if alerts:
-            rows = self.alerts()
-            rows.extend(dict(x) for x in alerts)
-            self._save(self.alerts_path, rows)
+        if not alerts:
+            return
+        with self.db.transaction() as db:
+            db.executemany("""INSERT OR IGNORE INTO alerts
+                (alert_id,monitor_id,target,observed_at,severity,change_type,campaign_key,details)
+                VALUES(?,?,?,?,?,?,?,?)""",
+                [(x.get("alert_id", uuid4().hex), x.get("monitor_id", ""), x.get("target", ""), x.get("observed_at"),
+                  x.get("severity", "medium"), x.get("change_type", "change"), x.get("campaign_key"), self.db.encode(x.get("details", {}))) for x in alerts])
 
 
 def utc_timestamp() -> str:
@@ -88,7 +178,6 @@ def create_monitor_target(*, url: str, device: str = "desktop", enabled: bool = 
 
 
 def build_alerts(*, monitor_id: str, target: str, previous: list[dict[str, Any]], current: list[dict[str, Any]], observed_at: str | None = None) -> list[dict[str, Any]]:
-    """Turn evidence-backed changes into alert records; continued/no-op campaigns are omitted."""
     changes = detect_changes(previous, current)["changes"]
     timestamp = observed_at or utc_timestamp()
     alerts: list[dict[str, Any]] = []
