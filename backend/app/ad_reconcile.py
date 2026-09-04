@@ -4,6 +4,7 @@ import hashlib
 from typing import Any
 
 from .ad_records import AdRecord
+from .ad_request_resolution import match_ad_requests, resolve_ad_requests
 from .ad_type import classify_ad_type, is_above_fold
 from .bid_models import BidEvidence
 
@@ -81,18 +82,32 @@ def _evidence_key(item: dict[str, object]) -> str:
     return f"{int(item.get('frame_index', 0))}:{item.get('id') or item.get('selector')}"
 
 
+def _resolution(slot: dict[str, Any], requests: list[dict[str, Any]]) -> dict[str, Any] | None:
+    matches = match_ad_requests(slot, requests)
+    if not matches:
+        return None
+    return {
+        "request_kind": "ad_request",
+        "match_method": "explicit_slot_id_or_ad_unit_path",
+        "match_score": matches[0]["match_score"],
+        "matched_requests": matches,
+    }
+
+
 def reconcile_ad_records(
     ad_detection: Any,
     runtime_snapshots: list[dict[str, object]],
     visual_evidence: list[dict[str, object]],
+    network: list[dict[str, object]] | None = None,
 ) -> list[AdRecord]:
-    """Create one observable ad/slot record and attach auction bids as evidence."""
+    """Create observable ad records and attach explicit ad-request evidence when available."""
     runtime = _latest_runtime(runtime_snapshots)
     gpt = runtime.get("gpt", {}) if isinstance(runtime, dict) else {}
     prebid = runtime.get("prebid", {}) if isinstance(runtime, dict) else {}
     slots = gpt.get("slots", []) if isinstance(gpt, dict) else []
     bids = prebid.get("bids", []) if isinstance(prebid, dict) else []
     winners = prebid.get("winners", []) if isinstance(prebid, dict) else []
+    resolved_requests = resolve_ad_requests(network or [])
 
     dom_signals = [signal for signal in getattr(ad_detection, "signals", []) if signal.signal_type == "dom"]
     dom_by_key = {_signal_key(signal): signal for signal in dom_signals}
@@ -125,6 +140,10 @@ def reconcile_ad_records(
             has_video=bool(video_urls) or any(b.media_type in {"video", "outstream"} for b in slot_bids),
             ad_type_hint=winning.media_type if winning else None,
         )
+        request_resolution = _resolution(slot, resolved_requests)
+        evidence = ["runtime.gpt"] + (["runtime.prebid"] if slot_bids else []) + (["dom"] if slot_dom else []) + (["visual"] if placement else [])
+        if request_resolution:
+            evidence.append("network.ad_request")
         record = AdRecord(
             ad_id=_ad_id(["slot", element_id, slot.get("ad_unit_path")]),
             ad_type=ad_type if ad_type != "unknown" else "gpt_slot",
@@ -150,7 +169,8 @@ def reconcile_ad_records(
             winning_bid=winning,
             placement=_placement(slot_dom, placement),
             above_fold=is_above_fold(y=getattr(slot_dom, "y", None), height=getattr(slot_dom, "height", None)) if slot_dom else None,
-            evidence=["runtime.gpt"] + (["runtime.prebid"] if slot_bids else []) + (["dom"] if slot_dom else []) + (["visual"] if placement else []),
+            evidence=evidence,
+            request_resolution=request_resolution,
             confidence=min(0.98, 0.80 + (0.08 if slot_dom else 0.0) + (0.05 if response_info else 0.0) + (0.05 if winning else 0.0)),
         )
         records.append(record)
