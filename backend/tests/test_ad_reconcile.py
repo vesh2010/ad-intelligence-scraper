@@ -48,6 +48,21 @@ def test_reconcile_prebid_bid_with_gpt_and_dom_evidence():
     assert "visual" in record.evidence
 
 
+def test_standalone_prebid_winner_can_carry_explicit_request_resolution():
+    winner = {
+        "ad_unit_code": "slot-2", "element_id": "slot-2", "ad_unit_path": "/1234/news",
+        "bidder": "rubicon", "ad_id": "bid-2", "creative_id": "creative-2", "width": 300, "height": 250,
+        "cpm": 2.0, "currency": "USD", "rendered": True,
+    }
+    network = [{"url": "https://securepubads.g.doubleclick.net/gampad/ads?iu=%2F1234%2Fnews&slot=slot-2", "status": 200}]
+    runtime = [{"data": {"gpt": {"slots": []}, "prebid": {"bids": [], "winners": [winner]}}}]
+    records = reconcile_ad_records(AdDetectionResult(), runtime, [], network=network)
+    assert len(records) == 1
+    assert records[0].request_resolution is not None
+    assert records[0].request_resolution["match_score"] == 190
+    assert "network.ad_request" in records[0].evidence
+
+
 def test_dom_only_candidate_is_preserved():
     signal = AdSignal(signal_type="dom", confidence="medium", id="dom-only", selector="#dom-only",
                        width=320, height=50, hrefs=["https://example.com/offer"],
