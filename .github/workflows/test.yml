@@ -17,7 +17,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install -r requirements.txt
-      - run: python -m playwright install --with-deps chromium
-      - run: sudo apt-get update && sudo apt-get install -y tesseract-ocr
-      - run: PYTHONPATH=.. python -m pytest -q
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Install browser and OCR
+        run: |
+          python -m playwright install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr
+      - name: Compile guard
+        working-directory: .
+        run: python -m compileall -q scripts backend/app
+      - name: Run unit tests
+        run: PYTHONPATH=.. python -m pytest -q
