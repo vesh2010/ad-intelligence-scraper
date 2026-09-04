@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from typing import Any
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse, Response
@@ -32,10 +33,18 @@ def _campaign_key(record: dict[str, Any]) -> str:
     return "campaign_" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:20] if raw else ""
 
 
+def _publisher_domain(root_url: Any) -> str:
+    try:
+        return (urlparse(str(root_url or "")).hostname or "").lower().removeprefix("www.")
+    except ValueError:
+        return ""
+
+
 def _observations(payload: dict[str, Any]) -> list[dict[str, Any]]:
     pages = payload.get("pages")
     if not isinstance(pages, list):
         raise HTTPException(status_code=422, detail="pages must be a list")
+    publisher_domain = _publisher_domain(payload.get("root_url"))
     rows: list[dict[str, Any]] = []
     for page in pages:
         if not isinstance(page, dict):
@@ -48,6 +57,7 @@ def _observations(payload: dict[str, Any]) -> list[dict[str, Any]]:
             row.setdefault("device", page.get("device", "desktop"))
             row.setdefault("target_url", page.get("final_url") or page.get("url"))
             row.setdefault("run_id", page.get("run_id"))
+            row.setdefault("publisher_domain", publisher_domain)
             if not row.get("campaign_key") and not row.get("ad_id"):
                 row["campaign_key"] = _campaign_key(row)
             rows.append(row)
