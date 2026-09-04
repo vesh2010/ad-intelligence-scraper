@@ -13,8 +13,9 @@ def _present(value: Any) -> bool:
 def advertiser_evidence_confidence(record: dict[str, Any]) -> dict[str, Any]:
     """Score advertiser identity from corroborating observable evidence.
 
-    OCR/visual text is deliberately treated as supporting evidence only and can
-    never produce a verified identity by itself.
+    OCR/visual text is supporting evidence only and can never produce a
+    verified identity by itself. Request-resolution evidence is also treated
+    as corroboration unless it explicitly exposes advertiser metadata.
     """
     evidence = {str(item).strip().lower() for item in (record.get("evidence") or []) if str(item).strip()}
     signals: list[str] = []
@@ -32,6 +33,10 @@ def advertiser_evidence_confidence(record: dict[str, Any]) -> dict[str, Any]:
     if _present(record.get("bidder")) or _present(record.get("network")):
         score += 10
         signals.append("ad_tech_signal")
+    resolution = record.get("request_resolution")
+    if isinstance(resolution, dict) and resolution.get("matches"):
+        score += 5
+        signals.append("request_resolution")
     if any("creative" in item or "ocr" in item or "visual" in item for item in evidence):
         score += 10
         signals.append("creative_visual_support")
