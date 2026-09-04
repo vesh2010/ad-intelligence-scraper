@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from numbers import Real
 from typing import Any
 
 
@@ -34,6 +35,36 @@ def _creative_set(rows: list[dict[str, Any]]) -> set[str]:
     return values
 
 
+def _creative_change(before: set[str], after: set[str], key: str) -> list[dict[str, Any]]:
+    if not before and not after:
+        return []
+    if before and after and before == after:
+        return []
+    if not before:
+        return [{"campaign_key": key, "change": "creative_added", "added": sorted(after)}]
+    if not after:
+        return [{"campaign_key": key, "change": "creative_removed", "removed": sorted(before)}]
+    return [{"campaign_key": key, "change": "creative_changed", "added": sorted(after - before), "removed": sorted(before - after)}]
+
+
+def _numeric_set(rows: list[dict[str, Any]], field: str) -> set[float]:
+    values: set[float] = set()
+    for row in rows:
+        value = row.get(field)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, Real):
+            values.add(float(value))
+            continue
+        try:
+            text = _text(value)
+            if text:
+                values.add(float(text))
+        except (TypeError, ValueError):
+            continue
+    return values
+
+
 def _compare_campaign(key: str, before: list[dict[str, Any]], after: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if not before:
         return [{"campaign_key": key, "change": "new_campaign"}]
@@ -45,10 +76,9 @@ def _compare_campaign(key: str, before: list[dict[str, Any]], after: list[dict[s
     before_places, after_places = _set(before, "ad_unit_code"), _set(after, "ad_unit_code")
     before_creatives, after_creatives = _creative_set(before), _creative_set(after)
     before_networks, after_networks = _set(before, "network_name"), _set(after, "network_name")
-    before_cpms, after_cpms = _set(before, "cpm"), _set(after, "cpm")
+    before_cpms, after_cpms = _numeric_set(before, "cpm"), _numeric_set(after, "cpm")
 
-    if before_creatives and after_creatives and before_creatives != after_creatives:
-        changes.append({"campaign_key": key, "change": "creative_changed", "added": sorted(after_creatives - before_creatives), "removed": sorted(before_creatives - after_creatives)})
+    changes.extend(_creative_change(before_creatives, after_creatives, key))
     if before_places != after_places:
         changes.append({"campaign_key": key, "change": "placement_changed", "added": sorted(after_places - before_places), "removed": sorted(before_places - after_places)})
     if before_devices != after_devices:
@@ -105,9 +135,14 @@ def _summary(changes: list[dict[str, Any]]) -> dict[str, Any]:
         "new_campaigns": sum(c["change"] == "new_campaign" for c in changes),
         "disappeared_campaigns": sum(c["change"] == "campaign_disappeared" for c in changes),
         "continued_campaigns": sum(c["change"] == "continued" for c in changes),
-        "creative_changes": sum(c["change"] == "creative_changed" for c in changes),
+        "creative_changes": sum(c["change"] in {"creative_changed", "creative_added", "creative_removed"} for c in changes),
+        "creative_added": sum(c["change"] == "creative_added" for c in changes),
+        "creative_removed": sum(c["change"] == "creative_removed" for c in changes),
         "placement_changes": sum(c["change"] == "placement_changed" for c in changes),
         "device_targeting_changes": sum(c["change"] == "device_targeting_changed" for c in changes),
         "network_changes": sum(c["change"] == "network_changed" for c in changes),
         "cpm_changes": sum(c["change"] == "cpm_changed" for c in changes),
     }
+
+
+__all__ = ["detect_changes", "detect_history_changes"]
