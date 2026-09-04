@@ -1,5 +1,8 @@
+from io import BytesIO
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pypdf import PdfReader
 
 from app.site_reports import build_site_report_router
 
@@ -37,11 +40,16 @@ def test_site_report_endpoints():
     html = client.post("/api/site-crawl/report.html", json=payload)
     assert html.status_code == 200
     assert "Competitor / brand frequency" in html.text
+    assert "Acme Advertiser" in html.text
+    assert "Acme" in html.text
 
     pdf = client.post("/api/site-crawl/report.pdf", json=payload)
     assert pdf.status_code == 200
     assert pdf.headers["content-type"] == "application/pdf"
     assert pdf.content.startswith(b"%PDF")
+    pdf_text = "\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(pdf.content)).pages)
+    assert "Acme Advertiser" in pdf_text
+    assert "Acme" in pdf_text
 
     intelligence = client.post("/api/site-crawl/intelligence", json=payload)
     assert intelligence.status_code == 200
