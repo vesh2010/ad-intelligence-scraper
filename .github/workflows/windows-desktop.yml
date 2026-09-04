@@ -1,0 +1,99 @@
+name: windows-desktop
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: python -m pip install -r desktop_requirements.txt
+
+      - name: Install Chromium into bundle staging directory
+        shell: pwsh
+        run: |
+          $env:PLAYWRIGHT_BROWSERS_PATH = "$pwd\packaging\browsers"
+          python -m playwright install chromium
+
+      - name: Install OCR and media tools
+        shell: pwsh
+        run: |
+          choco install tesseract -y --no-progress
+          choco install ffmpeg -y --no-progress
+          New-Item -ItemType Directory -Force packaging\tools | Out-Null
+          Copy-Item "C:\Program Files\Tesseract-OCR\*" packaging\tools -Recurse -Force
+          $ffmpeg = Get-ChildItem "C:\ProgramData\chocolatey\bin\ffmpeg.exe" -ErrorAction SilentlyContinue
+          $ffprobe = Get-ChildItem "C:\ProgramData\chocolatey\bin\ffprobe.exe" -ErrorAction SilentlyContinue
+          if ($ffmpeg) { Copy-Item $ffmpeg.FullName packaging\tools\ffmpeg.exe -Force }
+          if ($ffprobe) { Copy-Item $ffprobe.FullName packaging\tools\ffprobe.exe -Force }
+
+      - name: Build single-file executable
+        shell: pwsh
+        run: |
+          python -m PyInstaller --clean --noconfirm packaging\AdIntelligenceScraper.spec
+          if (-not (Test-Path dist\AdIntelligenceScraper.exe)) { throw 'EXE was not produced' }
+          Get-Item dist\AdIntelligenceScraper.exe | Select-Object Name,Length
+
+      - name: Portable executable smoke test
+        shell: pwsh
+        run: |
+          $proc = Start-Process -FilePath "$pwd\dist\AdIntelligenceScraper.exe" -PassThru
+          try {
+            $healthy = $false
+            for ($i = 0; $i -lt 60; $i++) {
+              try {
+                $r = Invoke-WebRequest -Uri 'http://127.0.0.1:8765/api/health' -UseBasicParsing -TimeoutSec 2
+                if ($r.StatusCode -eq 200) { $healthy = $true; break }
+              } catch {}
+              Start-Sleep -Seconds 1
+            }
+            if (-not $healthy) { throw 'Portable executable did not expose /api/health within 60 seconds' }
+            $docs = Invoke-WebRequest -Uri 'http://127.0.0.1:8765/docs' -UseBasicParsing -TimeoutSec 5
+            if ($docs.StatusCode -ne 200) { throw 'Portable executable /docs check failed' }
+          } finally {
+            if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+          }
+
+      - name: Prepare release artifact
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release | Out-Null
+          Copy-Item dist\AdIntelligenceScraper.exe release\AdIntelligenceScraper.exe
+          @'
+          Ad Intelligence Scraper - Windows Portable
+
+          Double-click AdIntelligenceScraper.exe.
+          The application starts its local backend and opens the dashboard in your browser.
+          No Docker, Python, Node.js, Playwright, Chromium or other runtime installation is required.
+
+          Keep the console window open while using the application. Closing it stops the local server.
+          Data and crawl history are stored in a data folder next to the executable.
+          '@ | Set-Content release\README.txt
+
+      - name: Upload Windows portable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AdIntelligenceScraper-Windows-Portable
+          path: release/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Create GitHub release asset for version tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/AdIntelligenceScraper.exe
+          generate_release_notes: true
