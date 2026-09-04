@@ -31,29 +31,16 @@ class MonitorStore:
     def _initialize(self) -> None:
         with self.db.transaction() as db:
             db.execute("""CREATE TABLE IF NOT EXISTS monitors (
-                monitor_id TEXT PRIMARY KEY,
-                target TEXT NOT NULL,
-                target_key TEXT NOT NULL,
-                device TEXT NOT NULL,
-                enabled INTEGER NOT NULL,
-                interval_minutes INTEGER NOT NULL,
-                crawl_options TEXT NOT NULL,
-                created_at TEXT,
-                updated_at TEXT,
-                last_run_at TEXT,
-                last_run_status TEXT,
-                last_error TEXT
+                monitor_id TEXT PRIMARY KEY, target TEXT NOT NULL, target_key TEXT NOT NULL,
+                device TEXT NOT NULL, enabled INTEGER NOT NULL, interval_minutes INTEGER NOT NULL,
+                crawl_options TEXT NOT NULL, created_at TEXT, updated_at TEXT,
+                last_run_at TEXT, last_run_status TEXT, last_error TEXT
             )""")
             db.execute("CREATE INDEX IF NOT EXISTS idx_monitors_target_key ON monitors(target_key)")
             db.execute("""CREATE TABLE IF NOT EXISTS alerts (
-                alert_id TEXT PRIMARY KEY,
-                monitor_id TEXT NOT NULL,
-                target TEXT NOT NULL,
-                observed_at TEXT,
-                severity TEXT NOT NULL,
-                change_type TEXT NOT NULL,
-                campaign_key TEXT,
-                details TEXT NOT NULL,
+                alert_id TEXT PRIMARY KEY, monitor_id TEXT NOT NULL, target TEXT NOT NULL,
+                observed_at TEXT, severity TEXT NOT NULL, change_type TEXT NOT NULL,
+                campaign_key TEXT, details TEXT NOT NULL,
                 FOREIGN KEY(monitor_id) REFERENCES monitors(monitor_id) ON DELETE CASCADE
             )""")
             db.execute("CREATE INDEX IF NOT EXISTS idx_alerts_monitor_time ON alerts(monitor_id, observed_at, alert_id)")
@@ -62,8 +49,8 @@ class MonitorStore:
         marker = self.root / ".sqlite_migrated"
         if marker.exists() or not self.root.is_dir():
             return
-        targets = []
-        alerts = []
+        targets: list[dict[str, Any]] = []
+        alerts: list[dict[str, Any]] = []
         try:
             payload = json.loads(self.path.read_text(encoding="utf-8")) if self.path.is_file() else []
             targets = [x for x in payload if isinstance(x, dict)] if isinstance(payload, list) else []
@@ -84,10 +71,13 @@ class MonitorStore:
                      self.db.encode(row.get("crawl_options", {})), row.get("created_at"), row.get("updated_at"), row.get("last_run_at"),
                      row.get("last_run_status"), row.get("last_error")))
             for row in alerts:
+                monitor_id = str(row.get("monitor_id", ""))
+                if not db.execute("SELECT 1 FROM monitors WHERE monitor_id=?", (monitor_id,)).fetchone():
+                    continue
                 db.execute("""INSERT OR IGNORE INTO alerts
                     (alert_id,monitor_id,target,observed_at,severity,change_type,campaign_key,details)
                     VALUES(?,?,?,?,?,?,?,?)""",
-                    (row.get("alert_id", uuid4().hex), row.get("monitor_id", ""), row.get("target", ""), row.get("observed_at"),
+                    (row.get("alert_id", uuid4().hex), monitor_id, row.get("target", ""), row.get("observed_at"),
                      row.get("severity", "medium"), row.get("change_type", "change"), row.get("campaign_key"), self.db.encode(row.get("details", {}))))
         try:
             marker.write_text("sqlite", encoding="utf-8")
@@ -102,6 +92,9 @@ class MonitorStore:
             result["crawl_options"] = json.loads(result.get("crawl_options") or "{}")
         except json.JSONDecodeError:
             result["crawl_options"] = {}
+        for key in ("last_run_at", "last_run_status", "last_error"):
+            if result.get(key) is None:
+                result.pop(key, None)
         return result
 
     def list_targets(self) -> list[dict[str, Any]]:
@@ -135,10 +128,7 @@ class MonitorStore:
 
     def alerts(self, monitor_id: str | None = None) -> list[dict[str, Any]]:
         with self.db.transaction() as db:
-            if monitor_id:
-                rows = db.execute("SELECT * FROM alerts WHERE monitor_id=? ORDER BY observed_at, alert_id", (monitor_id,)).fetchall()
-            else:
-                rows = db.execute("SELECT * FROM alerts ORDER BY observed_at, alert_id").fetchall()
+            rows = db.execute("SELECT * FROM alerts WHERE monitor_id=? ORDER BY observed_at, alert_id", (monitor_id,)).fetchall() if monitor_id else db.execute("SELECT * FROM alerts ORDER BY observed_at, alert_id").fetchall()
         result = []
         for row in rows:
             item = dict(row)
