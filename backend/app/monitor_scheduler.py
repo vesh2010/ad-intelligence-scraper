@@ -13,19 +13,39 @@ def parse_timestamp(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except (TypeError, ValueError):
         return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _interval_minutes(target: dict[str, Any]) -> int:
+    try:
+        value = int(target.get("interval_minutes", MIN_INTERVAL_MINUTES))
+    except (TypeError, ValueError, OverflowError):
+        value = MIN_INTERVAL_MINUTES
+    return max(MIN_INTERVAL_MINUTES, value)
+
+
+def _utc_now(clock: Callable[[], datetime]) -> datetime:
+    value = clock()
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 def is_due(target: dict[str, Any], *, now: datetime) -> bool:
     if not target.get("enabled", True):
         return False
-    interval = max(MIN_INTERVAL_MINUTES, int(target.get("interval_minutes", MIN_INTERVAL_MINUTES)))
+    interval = _interval_minutes(target)
+    current = now if now.tzinfo is not None else now.replace(tzinfo=timezone.utc)
+    current = current.astimezone(timezone.utc)
     last_run = parse_timestamp(target.get("last_run_at"))
     if last_run is None:
         return True
-    return now >= last_run + timedelta(minutes=interval)
+    return current >= last_run + timedelta(minutes=interval)
 
 
 class MonitorScheduler:
@@ -43,7 +63,7 @@ class MonitorScheduler:
         self._running: set[str] = set()
 
     def due_targets(self) -> list[dict[str, Any]]:
-        now = self.clock()
+        now = _utc_now(self.clock)
         return [target for target in self.store.list_targets() if is_due(target, now=now) and target.get("monitor_id") not in self._running]
 
     async def run_due_once(self) -> list[dict[str, Any]]:
@@ -53,13 +73,13 @@ class MonitorScheduler:
             self._running.add(monitor_id)
             try:
                 result = await self.runner(target)
-                target["last_run_at"] = self.clock().replace(microsecond=0).isoformat().replace("+00:00", "Z")
+                target["last_run_at"] = _utc_now(self.clock).replace(microsecond=0).isoformat().replace("+00:00", "Z")
                 target["last_run_status"] = "success"
                 target["last_error"] = None
                 self.store.upsert(target)
                 results.append({"monitor_id": monitor_id, "status": "success", "result": result})
             except Exception as exc:
-                target["last_run_at"] = self.clock().replace(microsecond=0).isoformat().replace("+00:00", "Z")
+                target["last_run_at"] = _utc_now(self.clock).replace(microsecond=0).isoformat().replace("+00:00", "Z")
                 target["last_run_status"] = "error"
                 target["last_error"] = str(exc)
                 self.store.upsert(target)
