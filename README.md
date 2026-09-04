@@ -4,7 +4,7 @@ A browser-based web ad intelligence collector. The pipeline is built incremental
 
 ## v1.0.0 status
 
-The v1.0.0 implementation is complete for the defined evidence-first scope. GitHub Actions gates both the Python/browser regression suite and a Docker build/runtime smoke test. The system is production-oriented, but live publisher behavior remains inherently variable and must be interpreted from evidence.
+The v1.0.0 implementation is complete for the defined evidence-first scope. GitHub Actions gates the Python/browser regression suite, Docker runtime smoke test, and Windows portable application build. The system is production-oriented, but live publisher behavior remains inherently variable and must be interpreted from evidence.
 
 ## What you use it for
 
@@ -22,7 +22,24 @@ The system reports **observed evidence**, not a claim of total market inventory 
 
 ## Fastest way to start
 
-### Option A — Docker (recommended)
+### Option A — Windows portable app (recommended for sharing)
+
+The repository's `windows-desktop` GitHub Actions workflow builds a single `AdIntelligenceScraper.exe` for Windows. The executable bundles the Python application, Chromium, OCR and media tooling, so the recipient does **not** need Docker, Python, Node.js, Playwright or a separate Chromium installation.
+
+To create a downloadable build, use the successful Windows workflow artifact from GitHub Actions, or push a version tag to publish the EXE as a GitHub Release asset. Copy the single `AdIntelligenceScraper.exe` to the Windows computer and double-click it.
+
+What happens:
+
+1. the EXE starts the local backend on `127.0.0.1:8765`;
+2. it opens the default browser automatically;
+3. the user operates the normal web UI;
+4. crawl data is stored in a `data` folder next to the EXE;
+5. the monitoring scheduler runs while the EXE remains open;
+6. closing the console window stops the local backend.
+
+The EXE is intentionally localhost-only; it does not publish the scraper API to the LAN or internet.
+
+### Option B — Docker
 
 From the repository root:
 
@@ -30,22 +47,9 @@ From the repository root:
 docker compose up -d --build
 ```
 
-Open:
+Open `http://127.0.0.1:8000/` for the UI. Docker remains the better option for an always-on server.
 
-- `http://127.0.0.1:8000/` — visual operator UI
-- `http://127.0.0.1:8000/docs` — interactive API documentation
-
-The compose file binds port 8000 to localhost only by default. This prevents an unauthenticated scraper API from being exposed directly to the LAN or internet.
-
-To stop it:
-
-```bash
-docker compose down
-```
-
-Your `./data` directory remains persistent across container restarts.
-
-### Option B — Python
+### Option C — Python
 
 ```bash
 python -m venv .venv
@@ -55,68 +59,42 @@ python -m playwright install chromium
 uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
 ```
 
-On Windows PowerShell, activate the environment with `.venv\\Scripts\\Activate.ps1`.
-
 ## Operator workflow
 
 ### 1. One-page investigation
 
 Open the UI, enter the publisher URL, leave **Site crawl** off, and press **Start crawl**.
 
-Use this when you want a detailed snapshot of one page. Review:
+Use this when you want a detailed snapshot of one page. Review network/DOM signals, normalized ad records, advertiser/brand evidence, visual candidates/OCR, ads.txt and raw JSON.
 
-- network and DOM ad signals
-- detected ad technologies
-- normalized ad records
-- advertiser/brand evidence
-- visual candidates and OCR
-- ads.txt
-- raw crawl JSON
-
-If you need stronger advertiser evidence, enable **Enrich landing pages**. This follows bounded destinations and collects additional landing-page metadata.
+If you need stronger advertiser evidence, enable **Enrich landing pages**.
 
 ### 2. Desktop vs mobile
 
-For API users, call `POST /api/crawl/both-devices`. The result contains the desktop crawl, mobile crawl and a comparison showing campaigns present on desktop only, mobile only, or both, plus placement differences.
-
-This is the best mode for investigating responsive ad targeting.
+For API users, call `POST /api/crawl/both-devices`. The result contains desktop/mobile crawls and a comparison showing campaigns present on desktop only, mobile only, or both, plus placement differences.
 
 ### 3. Site investigation
 
-Enable **Site crawl** in the UI and choose a bounded page/depth limit. Use this for a small publisher section rather than trying to crawl an entire large site.
-
-For API users, call `POST /api/site-crawl` and then one of the `/api/site-crawl/report.*` endpoints with the returned payload.
+Enable **Site crawl** and choose a bounded page/depth limit. Use this for a small publisher section rather than an entire large site.
 
 ### 4. Repeated monitoring
 
-In the UI's **Monitoring** section:
+In **Monitoring**:
 
-1. enter the target URL above;
+1. enter the target URL;
 2. choose Desktop, Mobile, or Desktop + Mobile;
-3. choose an interval of at least 60 minutes;
+3. choose at least 60 minutes;
 4. click **Create monitor**.
 
-The production Docker configuration runs the scheduler automatically. You can also click **Run** for an immediate check.
+Docker and the Windows portable application enable the scheduler automatically. Python development mode leaves it disabled unless explicitly enabled. Click **Run** for an immediate check.
 
-The monitor compares the new observation with that monitor's own history and creates alerts for campaign appearance/disappearance, creative changes, placement/device/network changes and CPM changes.
-
-Use **Alerts** to inspect stored alert events. Delete a monitor when you no longer need it; its alerts are removed with it.
+Alerts can cover campaign appearance/disappearance, creative changes, placement/device/network changes and CPM changes. Use **Alerts** to inspect stored events.
 
 ### 5. Reports
 
-For a stored single crawl, use:
+Use run reports for a single crawl, historical reports for repeated monitoring data, and site reports for bounded multi-page investigations. Reports include campaign intelligence, competitor/brand frequency, device intelligence, historical changes and advertiser/creative evidence.
 
-- `/api/runs/{run_id}/report.html`
-- `/api/runs/{run_id}/report.pdf`
-- `/api/runs/{run_id}/intelligence`
-
-For historical monitoring data, use:
-
-- `/api/history/report`
-- `/api/history/report.pdf`
-- `/api/history/intelligence`
-
-Reports include campaign intelligence, competitor/brand frequency, device intelligence, historical changes and advertiser/creative evidence. Competitor frequency is the share of **observed ad records**, not market share.
+Competitor frequency is the share of **observed ad records**, not market share.
 
 ## Evidence rules
 
@@ -124,11 +102,11 @@ The scraper does **not** treat OCR text, visual similarity, an ad-tech vendor na
 
 ## Data and backups
 
-Persistent data is under `data/`:
+Persistent data is under `data/` (or beside the Windows EXE):
 
-- `data/history/history.sqlite3` — observations
-- `data/monitoring/monitoring.sqlite3` — monitor targets and alerts
-- `data/runs/` — crawl artifacts
+- `history/history.sqlite3` — observations
+- `monitoring/monitoring.sqlite3` — monitor targets and alerts
+- `runs/` — crawl artifacts
 
 Create a consistent backup with:
 
@@ -136,17 +114,11 @@ Create a consistent backup with:
 python scripts/backup.py
 ```
 
-This creates a timestamped ZIP under `data/backups/`, using SQLite's backup API for the databases and preserving crawl artifacts plus legacy JSON compatibility files.
-
-For important production data, copy the generated ZIP to a separate machine/storage location. A Docker container restart is not a backup.
+For the Windows portable build, run the same script only when using a Python checkout; the portable EXE stores its data next to itself and should be backed up by copying its `data` folder while the application is stopped.
 
 ## Security / deployment guidance
 
-The default compose deployment is deliberately localhost-only because the API has no built-in user authentication. **Do not expose port 8000 directly to the public internet.**
-
-If you need remote access, put the service behind an authenticated reverse proxy/VPN/SSH tunnel and keep the container's application port private. For a personal workstation, an SSH tunnel or VPN is preferable to opening the port publicly.
-
-The crawler includes SSRF protections and bounded downloads/crawls, but the service should still be treated as an operator-controlled network tool rather than an anonymous public endpoint.
+The default deployments are localhost-only because the API has no built-in user authentication. Do not expose it directly to the public internet. For remote access, use an authenticated reverse proxy/VPN/SSH tunnel.
 
 ## Current scope
 
@@ -164,7 +136,7 @@ The crawler includes SSRF protections and bounded downloads/crawls, but the serv
 - DOM candidate screenshots, geometry and visual evidence
 - bounded local OCR and visual classification
 - discoverable image, video and audio creative asset capture with SSRF/size limits
-- optional FFprobe media metadata inspection in production containers
+- optional FFprobe media metadata inspection
 - public `ads.txt` retrieval and parsing
 - landing-page enrichment with SSRF protections and bounded destinations
 - stable campaign identity and creative fingerprints
@@ -176,56 +148,12 @@ The crawler includes SSRF protections and bounded downloads/crawls, but the serv
 - scheduled monitor execution with per-monitor isolation and failure status
 - FastAPI API plus a built-in inspection UI
 - self-contained HTML and vector PDF intelligence reports
-- Docker build/runtime health and API smoke testing
+- Docker build/runtime health and smoke testing
+- Windows single-file portable executable with bundled browser/runtime dependencies
 
 ## API reference
 
-Open `/docs` while the service is running for the interactive Swagger UI. The core endpoints are:
-
-- `GET /api/health`
-- `POST /api/crawl`
-- `POST /api/crawl/both-devices`
-- `POST /api/site-crawl`
-- `POST /api/monitors`
-- `GET /api/monitors`
-- `PATCH /api/monitors/{monitor_id}`
-- `DELETE /api/monitors/{monitor_id}`
-- `POST /api/monitors/{monitor_id}/run`
-- `GET /api/monitors/{monitor_id}/alerts`
-- `GET /api/history?target=...`
-- `GET /api/history/intelligence?target=...`
-- `GET /api/history/report?target=...`
-- `GET /api/history/report.pdf?target=...`
-- `GET /api/runs/{run_id}`
-- `GET /api/runs/{run_id}/artifact/{artifact_name}`
-- `GET /api/runs/{run_id}/report.html`
-- `GET /api/runs/{run_id}/report.pdf`
-- `GET /api/runs/{run_id}/intelligence`
-
-## Crawl artifacts
-
-Each run is written beneath `data/runs/<run_id>/` and can contain:
-
-```text
-page.html
-screenshot.png
-ads.json
-runtime_ads.json
-visual_evidence.json
-creative_assets.json
-ad_records.json
-ad_request_resolution.json
-ads.txt.json
-landing_enrichment.json
-trace.zip
-result.json
-ad_candidates/*.png
-creative_assets/*
-```
-
-## Media note
-
-The collector can preserve discoverable image/video/audio URLs and bounded copies of public media assets. FFprobe metadata is collected for downloaded video/audio files when available. The system does not claim that every video contains a separately extractable song/audio track; that requires an explicit media-decoder extraction pipeline and is outside the v1.0.0 evidence contract.
+Open `/docs` while the service is running for interactive Swagger documentation. Core endpoints include `/api/crawl`, `/api/crawl/both-devices`, `/api/site-crawl`, `/api/monitors`, `/api/history`, and `/api/runs/{run_id}/...`.
 
 ## Testing
 
@@ -234,7 +162,7 @@ cd backend
 pytest -q
 ```
 
-CI installs Chromium and Tesseract and executes the browser regression tests plus the pure Python tests. A second GitHub Actions workflow builds the production Docker image, starts it, waits for `/api/health`, verifies `/docs`, and captures diagnostics on failure.
+CI validates Python/browser behavior, Docker startup, and the Windows portable executable's startup, `/api/health` and `/docs` endpoints.
 
 ## Acceptance status
 
@@ -251,8 +179,9 @@ CI installs Chromium and Tesseract and executes the browser regression tests plu
 - API and artifact security validation: complete
 - Docker production packaging and smoke test: complete
 - Backup utility and operator runbook: complete
-- Automated regression CI: green on the latest validated release commits
+- Windows single-file portable application: complete, with automated startup smoke test
+- Automated regression CI: release gates enabled
 
 ## Live-site limitation
 
-External publisher pages can change their ad stack, inventory and consent behavior at any time. This environment cannot honestly guarantee a live NDTV Profit crawl from ChatGPT because external DNS access is unavailable here. The repository therefore treats synthetic browser regression, deterministic report tests, and Docker runtime checks as automated acceptance gates rather than fabricating live-site results. When a live publisher crawl is performed in an environment with network access, advertiser identity should still be reported as unknown whenever the publisher does not expose sufficient evidence.
+External publisher pages can change their ad stack, inventory and consent behavior at any time. This environment cannot honestly guarantee a live publisher crawl from ChatGPT because external DNS access is unavailable here. Automated acceptance therefore relies on browser regression, deterministic report tests, Docker runtime checks and the Windows executable smoke test. When a live publisher crawl is performed in an environment with network access, advertiser identity should still be reported as unknown whenever the publisher does not expose sufficient evidence.
