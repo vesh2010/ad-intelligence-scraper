@@ -34,18 +34,31 @@ jobs:
           choco install tesseract -y --no-progress
           choco install ffmpeg -y --no-progress
           New-Item -ItemType Directory -Force packaging\tools | Out-Null
-          Copy-Item "C:\Program Files\Tesseract-OCR\*" packaging\tools -Recurse -Force
+          Copy-Item "C:\Program Files\Tesseract-OCR\tesseract.exe" packaging\tools\ -Force
+          Get-ChildItem "C:\Program Files\Tesseract-OCR\*.dll" | Copy-Item -Destination packaging\tools -Force
+          New-Item -ItemType Directory -Force packaging\tools\tessdata | Out-Null
+          Copy-Item "C:\Program Files\Tesseract-OCR\tessdata\eng.traineddata" packaging\tools\tessdata\ -Force
           $ffmpeg = Get-ChildItem "C:\ProgramData\chocolatey\bin\ffmpeg.exe" -ErrorAction SilentlyContinue
           $ffprobe = Get-ChildItem "C:\ProgramData\chocolatey\bin\ffprobe.exe" -ErrorAction SilentlyContinue
           if ($ffmpeg) { Copy-Item $ffmpeg.FullName packaging\tools\ffmpeg.exe -Force }
           if ($ffprobe) { Copy-Item $ffprobe.FullName packaging\tools\ffprobe.exe -Force }
 
+      - name: Install UPX compressor
+        shell: pwsh
+        run: |
+          choco install upx -y --no-progress
+          if (-not (Get-Command upx -ErrorAction SilentlyContinue)) { throw 'UPX was not installed' }
+          upx --version
+
       - name: Build single-file executable
         shell: pwsh
         run: |
-          python -m PyInstaller --clean --noconfirm packaging\AdIntelligenceScraper.spec
+          $upx = Split-Path (Get-Command upx).Source -Parent
+          python -m PyInstaller --clean --noconfirm --upx-dir "$upx" packaging\AdIntelligenceScraper.spec
           if (-not (Test-Path dist\AdIntelligenceScraper.exe)) { throw 'EXE was not produced' }
-          Get-Item dist\AdIntelligenceScraper.exe | Select-Object Name,Length
+          $exe = Get-Item dist\AdIntelligenceScraper.exe
+          Write-Host "EXE size: $([math]::Round($exe.Length / 1MB, 1)) MB"
+          if ($exe.Length -gt 450MB) { throw 'EXE is larger than the 450 MB packaging budget' }
 
       - name: Portable executable smoke test
         shell: pwsh
