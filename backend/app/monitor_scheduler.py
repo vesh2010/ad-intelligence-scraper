@@ -39,22 +39,25 @@ def _utc_now(clock: Callable[[], datetime]) -> datetime:
 def is_due(target: dict[str, Any], *, now: datetime) -> bool:
     if not target.get("enabled", True):
         return False
-    interval = _interval_minutes(target)
-    current = now if now.tzinfo is not None else now.replace(tzinfo=timezone.utc)
-    current = current.astimezone(timezone.utc)
     last_run = parse_timestamp(target.get("last_run_at"))
     if last_run is None:
         return True
-    return current >= last_run + timedelta(minutes=interval)
+    current = now if now.tzinfo is not None else now.replace(tzinfo=timezone.utc)
+    return current.astimezone(timezone.utc) >= last_run + timedelta(minutes=_interval_minutes(target))
+
+
+def next_run_at(target: dict[str, Any], *, now: datetime | None = None) -> str | None:
+    """Return the next scheduled UTC run, or None when disabled/unscheduled."""
+    if not target.get("enabled", True):
+        return None
+    last_run = parse_timestamp(target.get("last_run_at"))
+    if last_run is None:
+        return (now or datetime.now(timezone.utc)).astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z") if (now or datetime.now(timezone.utc)) else None
+    return (last_run + timedelta(minutes=_interval_minutes(target))).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 class MonitorScheduler:
-    """Small asyncio scheduler for single-instance deployments.
-
-    The scheduler only decides when a monitor is due. The supplied runner owns
-    the actual crawl and persistence work, making it deterministic and easy to
-    test without starting Playwright.
-    """
+    """Small asyncio scheduler for single-instance deployments."""
 
     def __init__(self, store: MonitorStore, runner: Callable[[dict[str, Any]], Awaitable[Any]], *, clock: Callable[[], datetime] | None = None) -> None:
         self.store = store
@@ -100,4 +103,4 @@ class MonitorScheduler:
                 pass
 
 
-__all__ = ["MonitorScheduler", "is_due", "parse_timestamp", "MIN_INTERVAL_MINUTES"]
+__all__ = ["MonitorScheduler", "is_due", "parse_timestamp", "next_run_at", "MIN_INTERVAL_MINUTES"]
