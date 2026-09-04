@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import os
 import re
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -13,6 +16,8 @@ from .device_change import detect_history_changes
 from .dual_device_crawl import crawl_both_devices
 from .history_orchestration import persist_crawl_result, persist_dual_crawl_result
 from .history_store import HistoryStore
+from .monitor_execution import execute_monitor
+from .monitor_scheduler import MonitorScheduler
 from .monitoring import MonitorStore
 from .monitoring_routes import build_monitor_router
 from .report_html import render_html_report
@@ -20,10 +25,57 @@ from .report_intelligence import build_report_intelligence
 from .report_pdf import render_pdf_report
 from .site_crawl import crawl_site
 
-app = FastAPI(title="Ad Intelligence Scraper", version="0.8.0")
 crawler = SiteCrawler()
 history_store = HistoryStore()
 monitor_store = MonitorStore()
+_scheduler_task: asyncio.Task[None] | None = None
+
+
+def _scheduler_enabled() -> bool:
+    return os.getenv("AD_SCRAPER_ENABLE_MONITOR_SCHEDULER", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _scheduler_poll_seconds() -> int:
+    raw = os.getenv("AD_SCRAPER_MONITOR_POLL_SECONDS", "60")
+    try:
+        value = int(raw)
+    except ValueError:
+        return 60
+    return max(1, value)
+
+
+async def _run_monitor(target: dict[str, object]) -> dict[str, object]:
+    return await execute_monitor(
+        str(target.get("monitor_id")),
+        target,
+        crawler=crawler,
+        history_store=history_store,
+        monitor_store=monitor_store,
+    )
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    global _scheduler_task
+    if _scheduler_enabled():
+        scheduler = MonitorScheduler(monitor_store, _run_monitor)
+        _scheduler_task = asyncio.create_task(
+            scheduler.start(poll_seconds=_scheduler_poll_seconds()),
+            name="ad-intelligence-monitor-scheduler",
+        )
+    try:
+        yield
+    finally:
+        if _scheduler_task is not None:
+            _scheduler_task.cancel()
+            try:
+                await _scheduler_task
+            except asyncio.CancelledError:
+                pass
+            _scheduler_task = None
+
+
+app = FastAPI(title="Ad Intelligence Scraper", version="0.8.0", lifespan=lifespan)
 app.include_router(build_monitor_router(crawler, history_store, monitor_store))
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
