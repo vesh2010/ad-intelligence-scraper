@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any
 
+from .ad_request_resolution import match_ad_requests, resolve_ad_requests
 from .campaign_intelligence import build_campaign_intelligence
 from .device_change import detect_history_changes
 from .device_comparison import compare_devices
@@ -35,6 +36,35 @@ def _confidence_summary(observations: list[dict[str, Any]]) -> list[dict[str, An
     return summary
 
 
+def _request_resolution_summary(observations: list[dict[str, Any]]) -> dict[str, Any]:
+    resolved: list[dict[str, Any]] = []
+    for row in observations:
+        network = row.get("network")
+        if not isinstance(network, list):
+            continue
+        requests = resolve_ad_requests([item for item in network if isinstance(item, dict)])
+        runtime = row.get("runtime_ads")
+        snapshots = runtime.get("snapshots", []) if isinstance(runtime, dict) else []
+        latest = snapshots[-1].get("data", {}) if snapshots and isinstance(snapshots[-1], dict) else {}
+        gpt = latest.get("gpt", {}) if isinstance(latest, dict) else {}
+        slots = gpt.get("slots", []) if isinstance(gpt, dict) else []
+        for slot in slots if isinstance(slots, list) else []:
+            if isinstance(slot, dict):
+                matches = match_ad_requests(slot, requests)
+                if matches:
+                    resolved.append({
+                        "campaign_key": _campaign_key(row),
+                        "element_id": slot.get("element_id"),
+                        "ad_unit_path": slot.get("ad_unit_path"),
+                        "matches": matches,
+                    })
+    return {
+        "resolved_slots": resolved,
+        "resolved_slot_count": len(resolved),
+        "request_count": sum(len(resolve_ad_requests([item for item in row.get("network", []) if isinstance(item, dict)])) for row in observations if isinstance(row.get("network"), list)),
+    }
+
+
 def build_report_intelligence(observations: list[dict[str, Any]]) -> dict[str, Any]:
     """Build one report-ready, evidence-backed intelligence payload."""
     if not all(isinstance(row, dict) for row in observations):
@@ -48,5 +78,6 @@ def build_report_intelligence(observations: list[dict[str, Any]]) -> dict[str, A
         "devices": devices,
         "history": history,
         "advertiser_confidence": _confidence_summary(observations),
+        "ad_request_resolution": _request_resolution_summary(observations),
         "observation_count": len(observations),
     }
