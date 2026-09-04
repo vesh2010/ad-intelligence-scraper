@@ -28,7 +28,8 @@ SAFE_IMAGE_RE = re.compile(r"^ad_candidates/[A-Za-z0-9_.-]+\.(?:png|jpe?g|webp)$
 ARTIFACTS = {
     "html": "page.html", "screenshot": "screenshot.png", "network": "network.json",
     "ads": "ads.json", "runtime_ads": "runtime_ads.json", "visual_evidence": "visual_evidence.json",
-    "creative_assets": "creative_assets.json", "ad_records": "ad_records.json", "ads_txt": "ads.txt.json",
+    "creative_assets": "creative_assets.json", "ad_records": "ad_records.json",
+    "ad_request_resolution": "ad_request_resolution.json", "ads_txt": "ads.txt.json",
     "landing_enrichment": "landing_enrichment.json", "trace": "trace.zip",
 }
 
@@ -181,33 +182,26 @@ async def get_run(run_id: str) -> CrawlResult:
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Run not found")
     try:
-        return CrawlResult.model_validate(json.loads(path.read_text(encoding="utf-8")))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Stored run is invalid: {exc}") from exc
+        return CrawlResult.model_validate_json(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=500, detail="Stored run is invalid") from exc
 
 
 @app.get("/api/runs/{run_id}/artifact/{artifact_name}")
-async def get_artifact(run_id: str, artifact_name: str):
-    if not RUN_ID_RE.fullmatch(run_id):
-        raise HTTPException(status_code=400, detail="Invalid run ID")
-    filename = ARTIFACTS.get(artifact_name)
-    if filename is None:
-        raise HTTPException(status_code=404, detail="Unknown artifact")
-    path = (crawler.data_root / run_id / filename).resolve()
-    run_dir = (crawler.data_root / run_id).resolve()
-    if run_dir not in path.parents or not path.is_file():
+async def get_artifact(run_id: str, artifact_name: str) -> FileResponse:
+    if not RUN_ID_RE.fullmatch(run_id) or artifact_name not in ARTIFACTS:
+        raise HTTPException(status_code=400, detail="Invalid run or artifact")
+    path = crawler.data_root / run_id / ARTIFACTS[artifact_name]
+    if not path.is_file():
         raise HTTPException(status_code=404, detail="Artifact not found")
     return FileResponse(path)
 
 
 @app.get("/api/runs/{run_id}/image")
-async def get_candidate_image(run_id: str, path: str):
-    if not RUN_ID_RE.fullmatch(run_id):
-        raise HTTPException(status_code=400, detail="Invalid run ID")
-    if not SAFE_IMAGE_RE.fullmatch(path):
+async def get_image(run_id: str, path: str) -> FileResponse:
+    if not RUN_ID_RE.fullmatch(run_id) or not SAFE_IMAGE_RE.fullmatch(path):
         raise HTTPException(status_code=400, detail="Invalid image path")
-    run_dir = (crawler.data_root / run_id).resolve()
-    image = (run_dir / path).resolve()
-    if run_dir not in image.parents or not image.is_file():
+    image_path = crawler.data_root / run_id / path
+    if not image_path.is_file():
         raise HTTPException(status_code=404, detail="Image not found")
-    return FileResponse(image)
+    return FileResponse(image_path)
