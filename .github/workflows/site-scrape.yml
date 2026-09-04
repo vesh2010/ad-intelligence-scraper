@@ -51,6 +51,7 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Validate and compile
         run: |
+          set -euxo pipefail
           python -m compileall -q scripts backend/app
           python - <<'PY'
           import os
@@ -64,16 +65,46 @@ jobs:
               raise SystemExit('max_depth must be 0..5')
           PY
       - name: Run scraper and render reports
-        run: python scripts/ci_site_scrape.py
+        run: |
+          set -euxo pipefail
+          rm -rf ci-output data/runs
+          python scripts/ci_site_scrape.py
+      - name: Upload debug output on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scrape-debug-${{ github.run_id }}
+          path: |
+            data/
+            ci-output/
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Verify complete report
         run: |
+          set -euxo pipefail
           test -s ci-output/scrape_result.json
           test -s ci-output/run_metadata.json
           test -s ci-output/report/index.html
-          test -n "$(find data/runs -name result.json -type f -print -quit)"
-          test -n "$(find data/runs -name report.html -type f -print -quit)"
-          test -n "$(find data/runs -name report.pdf -type f -print -quit)"
-          test -n "$(find data/runs -name intelligence.json -type f -print -quit)"
+          result_count=$(find data/runs -name result.json -type f | wc -l)
+          html_count=$(find data/runs -name report.html -type f | wc -l)
+          pdf_count=$(find data/runs -name report.pdf -type f | wc -l)
+          intelligence_count=$(find data/runs -name intelligence.json -type f | wc -l)
+          page_count=$(find data/runs -name page.html -type f | wc -l)
+          screenshot_count=$(find data/runs -name screenshot.png -type f | wc -l)
+          test "$result_count" -gt 0
+          test "$html_count" -gt 0
+          test "$pdf_count" -gt 0
+          test "$intelligence_count" -gt 0
+          test "$page_count" -gt 0
+          test "$screenshot_count" -gt 0
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          metadata = json.loads(Path('ci-output/run_metadata.json').read_text(encoding='utf-8'))
+          if not metadata.get('run_ids'):
+              raise SystemExit('run_metadata.json has no run_ids')
+          print('Verified report runs:', ', '.join(metadata['run_ids']))
+          PY
       - name: Upload complete scrape artifact
         uses: actions/upload-artifact@v4
         with:
@@ -82,6 +113,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Job summary
+        if: always()
         run: |
           echo '## Ad Intelligence Scrape' >> "$GITHUB_STEP_SUMMARY"
           echo "Site: $SITE_URL" >> "$GITHUB_STEP_SUMMARY"
