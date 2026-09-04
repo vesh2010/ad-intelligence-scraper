@@ -61,8 +61,8 @@ jobs:
               raise SystemExit('Invalid site_url')
           if not 1 <= int(os.environ['MAX_PAGES']) <= 25:
               raise SystemExit('max_pages must be 1..25')
-          if not 0 <= int(os.environ['MAX_DEPTH']) <= 5:
-              raise SystemExit('max_depth must be 0..5')
+          if not 0 <= int(os.environ['MAX_DEPTH']) <= 10:
+              raise SystemExit('max_depth must be 0..10')
           PY
       - name: Run scraper and render reports
         run: |
