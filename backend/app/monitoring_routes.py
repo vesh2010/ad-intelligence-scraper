@@ -17,7 +17,29 @@ def _with_schedule(target: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def build_monitor_router(crawler: SiteCrawler, history_store: HistoryStore, monitor_store: MonitorStore) -> APIRouter:
+def build_monitor_router(
+    first: SiteCrawler | MonitorStore,
+    second: HistoryStore | SiteCrawler,
+    third: MonitorStore | HistoryStore,
+) -> APIRouter:
+    """Build the monitoring router while accepting both historical argument orders.
+
+    The canonical order is ``crawler, history_store, monitor_store``.  The
+    compatibility branch also accepts ``monitor_store, crawler, history_store``
+    used by the application wiring in older revisions.
+    """
+    if isinstance(first, MonitorStore):
+        monitor_store = first
+        crawler = second
+        history_store = third
+    else:
+        crawler = first
+        history_store = second
+        monitor_store = third
+
+    if not isinstance(crawler, SiteCrawler) or not isinstance(history_store, HistoryStore) or not isinstance(monitor_store, MonitorStore):
+        raise TypeError("build_monitor_router received invalid store/crawler arguments")
+
     router = APIRouter(prefix="/api/monitors", tags=["monitoring"])
 
     @router.get("")
