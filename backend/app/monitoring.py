@@ -15,8 +15,14 @@ class MonitorStore:
 
     def __init__(self, root: str | Path = "data/monitoring") -> None:
         self.root = Path(root)
-        self.path = self.root / "targets.json"
-        self.alerts_path = self.root / "alerts.json"
+
+    @property
+    def path(self) -> Path:
+        return self.root / "targets.json"
+
+    @property
+    def alerts_path(self) -> Path:
+        return self.root / "alerts.json"
 
     def _load(self, path: Path) -> list[dict[str, Any]]:
         if not path.is_file():
@@ -40,8 +46,7 @@ class MonitorStore:
         return next((x for x in self.list_targets() if x.get("monitor_id") == monitor_id), None)
 
     def upsert(self, target: dict[str, Any]) -> dict[str, Any]:
-        rows = self.list_targets()
-        rows = [x for x in rows if x.get("monitor_id") != target["monitor_id"]]
+        rows = [x for x in self.list_targets() if x.get("monitor_id") != target["monitor_id"]]
         rows.append(dict(target))
         self._save(self.path, rows)
         return target
