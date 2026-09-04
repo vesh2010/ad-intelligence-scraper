@@ -43,19 +43,18 @@ def _external_destination_domains(observation: dict[str, Any]) -> list[str]:
     if isinstance(landing, dict):
         urls.extend([landing.get("url"), landing.get("final_url")])
     for url in urls:
-        host = _host(url)
-        root = _root_domain(host)
+        root = _root_domain(_host(url))
         if root and root != publisher and root not in _AD_INFRASTRUCTURE:
             domains.add(root)
     return sorted(domains)
 
 
 def _competitor_identity(observation: dict[str, Any]) -> tuple[str, str]:
-    """Return a competitor label only from explicit advertiser/brand or destination evidence."""
+    """Use explicit advertiser/brand evidence first, then explicit external destination evidence."""
     publisher = _root_domain(_host(observation.get("publisher_domain")))
     for field, kind in (("advertiser_name", "advertiser"), ("brand_name", "brand")):
         value = _text(observation.get(field))
-        if value and _root_domain(_host(value)) != publisher:
+        if value:
             return value, kind
     domains = _external_destination_domains(observation)
     if domains:
@@ -64,7 +63,7 @@ def _competitor_identity(observation: dict[str, Any]) -> tuple[str, str]:
 
 
 def build_campaign_intelligence(observations: list[dict[str, Any]]) -> dict[str, Any]:
-    """Aggregate observations into campaign, frequency, and evidence-backed competitor signals."""
+    """Aggregate observations into campaigns, brand frequency, and evidence-backed competitor ads."""
     campaigns: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for observation in observations:
         key = _identity(observation)
@@ -86,18 +85,12 @@ def build_campaign_intelligence(observations: list[dict[str, Any]]) -> dict[str,
         advertiser = Counter(advertisers).most_common(1)[0][0] if advertisers else None
         if brand:
             brand_counts[brand] += len(rows)
-        competitor_labels: list[dict[str, str]] = []
-        for row in rows:
-            label, evidence_type = _competitor_identity(row)
-            if label:
-                competitor_labels.append({"label": label, "evidence_type": evidence_type})
-        if competitor_labels:
-            best = Counter(item["label"] for item in competitor_labels).most_common(1)[0][0]
-            evidence_types = sorted({item["evidence_type"] for item in competitor_labels if item["label"] == best})
-            competitor_groups[best].extend(rows)
-        else:
-            best = None
-            evidence_types = []
+        labels = [_competitor_identity(row) for row in rows]
+        labels = [(label, kind) for label, kind in labels if label]
+        competitor_label = Counter(label for label, _ in labels).most_common(1)[0][0] if labels else None
+        competitor_evidence = sorted({kind for label, kind in labels if label == competitor_label})
+        if competitor_label:
+            competitor_groups[competitor_label].extend(rows)
         campaign_rows.append({
             "campaign_key": key,
             "brand_name": brand,
@@ -112,34 +105,33 @@ def build_campaign_intelligence(observations: list[dict[str, Any]]) -> dict[str,
             "networks": sorted(set(networks)),
             "devices": dict(sorted(devices.items())),
             "above_fold_observations": sum(r.get("above_fold") is True for r in rows),
-            "competitor": bool(best),
-            "competitor_label": best,
-            "competitor_evidence": evidence_types,
+            "competitor": bool(competitor_label),
+            "competitor_label": competitor_label,
+            "competitor_evidence": competitor_evidence,
         })
 
     campaign_rows.sort(key=lambda row: (-row["observations"], row["campaign_key"]))
     total = len(observations)
-    competitors = []
+    competitor_ads: list[dict[str, Any]] = []
     for label, rows in competitor_groups.items():
         pages = sorted({(_text(r.get("target_url")) or _text(r.get("publisher_domain"))) for r in rows if _text(r.get("target_url")) or _text(r.get("publisher_domain"))})
-        competitor_campaigns = sorted({_identity(r) for r in rows if _identity(r)})
-        evidence = sorted({etype for r in rows for _, etype in [_competitor_identity(r)] if etype})
-        competitors.append({
+        campaign_keys = sorted({_identity(r) for r in rows if _identity(r)})
+        evidence = sorted({kind for r in rows for label2, kind in [_competitor_identity(r)] if label2 == label and kind})
+        competitor_ads.append({
             "competitor": label,
-            "brand_name": label,
+            "advertiser_name": label,
             "observations": len(rows),
             "observation_share_pct": round(len(rows) / total * 100, 2) if total else 0.0,
-            "campaign_count": len(competitor_campaigns),
+            "campaign_count": len(campaign_keys),
+            "campaign_keys": campaign_keys,
             "pages_observed": pages,
             "evidence": evidence,
         })
-    competitors.sort(key=lambda row: (-row["observations"], row["competitor"]))
+    competitor_ads.sort(key=lambda row: (-row["observations"], row["competitor"]))
     return {
         "campaigns": campaign_rows,
         "campaign_count": len(campaign_rows),
-        "competitors": competitors,
-        "competitor_count": len(competitors),
-        "brands": [
+        "competitors": [
             {
                 "brand_name": brand,
                 "observations": count,
@@ -147,5 +139,7 @@ def build_campaign_intelligence(observations: list[dict[str, Any]]) -> dict[str,
             }
             for brand, count in brand_counts.most_common()
         ],
+        "competitor_ads": competitor_ads,
+        "competitor_count": len(competitor_ads),
         "total_observations": total,
     }
