@@ -77,7 +77,7 @@ async def lifespan(_: FastAPI):
             _scheduler_task = None
 
 
-app = FastAPI(title="Ad Intelligence Scraper", version="0.9.0", lifespan=lifespan)
+app = FastAPI(title="Ad Intelligence Scraper", version="1.0.0", lifespan=lifespan)
 app.include_router(build_monitor_router(crawler, history_store, monitor_store))
 app.include_router(build_run_report_router(lambda: crawler.data_root))
 app.include_router(build_site_report_router())
