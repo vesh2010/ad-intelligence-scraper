@@ -13,9 +13,10 @@
     .sub { color: #6b7280; margin-bottom: 22px; }
     .card { background: white; border: 1px solid #e5e7eb; border-radius: 14px; padding: 18px; margin-bottom: 16px; box-shadow: 0 4px 14px rgba(0,0,0,.04); }
     label { display: block; font-weight: 600; margin-bottom: 8px; }
-    input[type=url], input[type=number] { width: 100%; padding: 12px 13px; border: 1px solid #d1d5db; border-radius: 10px; font-size: 15px; }
+    input[type=url], input[type=number], select { width: 100%; padding: 12px 13px; border: 1px solid #d1d5db; border-radius: 10px; font-size: 15px; }
     .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
     button { border: 0; border-radius: 10px; padding: 11px 16px; cursor: pointer; font-weight: 700; background: #111827; color: white; }
+    button.secondary { background: #374151; }
     button:disabled { opacity: .5; cursor: wait; }
     .status { margin-top: 12px; font-weight: 700; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
@@ -36,12 +37,13 @@
     @media (max-width: 800px) { .two { grid-template-columns: 1fr; } }
     .error { color: #b91c1c; }
     .ok { color: #166534; }
+    .warn { color: #92400e; }
   </style>
 </head>
 <body>
 <main>
   <h1>Ad Intelligence Scraper</h1>
-  <div class="sub">Crawl a rendered page or a bounded set of same-site pages and inspect ad evidence.</div>
+  <div class="sub">Crawl rendered pages, inspect evidence, export reports, and monitor campaign changes.</div>
 
   <section class="card">
     <label for="url">Website URL</label>
@@ -59,163 +61,74 @@
     <div id="status" class="status"></div>
   </section>
 
+  <section class="card">
+    <h3>Monitoring</h3>
+    <div class="row">
+      <div style="flex:2;min-width:220px"><label for="monitorDevice">Devices</label><select id="monitorDevice"><option value="desktop">Desktop</option><option value="mobile">Mobile</option><option value="both">Desktop + Mobile</option></select></div>
+      <div style="flex:1;min-width:160px"><label for="monitorInterval">Interval (minutes)</label><input id="monitorInterval" type="number" min="60" step="60" value="60" /></div>
+      <button id="createMonitor">Create monitor</button>
+      <button id="refreshMonitors" class="secondary">Refresh</button>
+    </div>
+    <div id="monitorStatus" class="status"></div>
+    <div id="monitors" style="margin-top:14px"></div>
+  </section>
+
   <div id="result" hidden>
     <section class="card">
-      <div class="muted">Crawl</div>
-      <h2 id="pageTitle">-</h2>
-      <div id="pageUrl" class="muted"></div>
+      <div class="row" style="justify-content:space-between"><div><div class="muted">Crawl</div><h2 id="pageTitle">-</h2><div id="pageUrl" class="muted"></div></div><div id="exports" class="row"></div></div>
       <div class="grid" style="margin-top:14px">
-        <div class="metric">HTTP<b id="http">-</b></div>
-        <div class="metric">Duration<b id="duration">-</b></div>
-        <div class="metric">Network signals<b id="networkSignals">-</b></div>
-        <div class="metric">DOM ad signals<b id="domSignals">-</b></div>
-        <div class="metric">Ad records<b id="adRecords">-</b></div>
-        <div class="metric">Visual evidence<b id="visualCount">-</b></div>
+        <div class="metric">HTTP<b id="http">-</b></div><div class="metric">Duration<b id="duration">-</b></div><div class="metric">Network signals<b id="networkSignals">-</b></div><div class="metric">DOM ad signals<b id="domSignals">-</b></div><div class="metric">Ad records<b id="adRecords">-</b></div><div class="metric">Visual evidence<b id="visualCount">-</b></div>
       </div>
     </section>
-
     <section id="singleResult" class="two">
-      <section class="card">
-        <h3>Rendered page</h3>
-        <img id="screenshot" alt="Rendered crawl screenshot" />
-      </section>
-      <section class="card">
-        <h3>Ad technologies</h3>
-        <div id="technologies"></div>
-        <h3>Runtime</h3>
-        <pre id="runtime"></pre>
-      </section>
+      <section class="card"><h3>Rendered page</h3><img id="screenshot" alt="Rendered crawl screenshot" /></section>
+      <section class="card"><h3>Ad technologies</h3><div id="technologies"></div><h3>Runtime</h3><pre id="runtime"></pre></section>
     </section>
-
-    <section class="card">
-      <h3>Visual ad candidates</h3>
-      <div id="visualGallery" class="gallery"></div>
-    </section>
-
-    <section id="siteSummary" class="card hidden">
-      <h3>Site crawl summary</h3>
-      <div class="grid">
-        <div class="metric">Pages crawled<b id="sitePages">-</b></div>
-        <div class="metric">Pages failed<b id="siteFailed">-</b></div>
-        <div class="metric">Pages discovered<b id="siteDiscovered">-</b></div>
-        <div class="metric">Ad signals<b id="siteAds">-</b></div>
-        <div class="metric">Normalized records<b id="siteRecords">-</b></div>
-      </div>
-      <h3>Pages</h3>
-      <div id="sitePagesTable"></div>
-    </section>
-
-    <section class="card">
-      <h3>Normalized ad records</h3>
-      <div id="records"></div>
-    </section>
-
-    <section class="card">
-      <h3>Supply chain: ads.txt</h3>
-      <pre id="adsTxt"></pre>
-    </section>
-
-    <section class="card">
-      <h3>Raw crawl JSON</h3>
-      <pre id="raw"></pre>
-    </section>
+    <section class="card"><h3>Visual ad candidates</h3><div id="visualGallery" class="gallery"></div></section>
+    <section id="siteSummary" class="card hidden"><h3>Site crawl summary</h3><div class="grid"><div class="metric">Pages crawled<b id="sitePages">-</b></div><div class="metric">Pages failed<b id="siteFailed">-</b></div><div class="metric">Pages discovered<b id="siteDiscovered">-</b></div><div class="metric">Ad signals<b id="siteAds">-</b></div><div class="metric">Normalized records<b id="siteRecords">-</b></div></div><h3>Pages</h3><div id="sitePagesTable"></div></section>
+    <section class="card"><h3>Normalized ad records</h3><div id="records"></div></section>
+    <section class="card"><h3>Supply chain: ads.txt</h3><pre id="adsTxt"></pre></section>
+    <section class="card"><h3>Raw crawl JSON</h3><pre id="raw"></pre></section>
   </div>
 </main>
 <script>
 const $ = (id) => document.getElementById(id);
-const esc = (value) => String(value ?? '').replace(/[&<>\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\\':'&#92;','"':'&quot;'}[c]));
-
-$('modeSite').addEventListener('change', () => {
-  $('siteOptions').classList.toggle('hidden', !$('modeSite').checked);
-});
+const esc = (value) => String(value ?? '').replace(/[&<>\\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\\':'&#92;','"':'&quot;'}[c]));
+let lastData = null;
+$('modeSite').addEventListener('change', () => $('siteOptions').classList.toggle('hidden', !$('modeSite').checked));
 
 function renderRecords(records) {
   if (!records.length) return '<div class="muted">No normalized records were produced.</div>';
-  return `<table><thead><tr><th>Type</th><th>Advertiser</th><th>Brand</th><th>Bidder</th><th>CPM</th><th>Bids</th><th>Evidence</th></tr></thead><tbody>${records.map(r =>
-    `<tr><td>${esc(r.ad_type)}</td><td>${esc(r.advertiser_name || r.advertiser_id || '-')}</td><td>${esc(r.brand_name || '-')}</td><td>${esc(r.bidder || '-')}</td><td>${esc(r.cpm != null ? `${r.cpm} ${r.currency || ''}` : '-')}</td><td>${esc((r.bids || []).length)}</td><td>${(r.evidence || []).map(e => `<span class="pill">${esc(e)}</span>`).join('')}</td></tr>`
-  ).join('')}</tbody></table>`;
+  return `<table><thead><tr><th>Type</th><th>Advertiser</th><th>Brand</th><th>Bidder</th><th>CPM</th><th>Bids</th><th>Evidence</th></tr></thead><tbody>${records.map(r => `<tr><td>${esc(r.ad_type)}</td><td>${esc(r.advertiser_name || r.advertiser_id || '-')}</td><td>${esc(r.brand_name || '-')}</td><td>${esc(r.bidder || '-')}</td><td>${esc(r.cpm != null ? `${r.cpm} ${r.currency || ''}` : '-')}</td><td>${esc((r.bids || []).length)}</td><td>${(r.evidence || []).map(e => `<span class="pill">${esc(e)}</span>`).join('')}</td></tr>`).join('')}</tbody></table>`;
 }
-
 function renderVisuals(runId, evidence) {
   if (!evidence.length) return '<div class="muted">No visual candidates captured.</div>';
-  return evidence.map(item => {
-    if (!item.screenshot) return `<div class="candidate"><div class="muted">${esc(item.selector || item.error || 'Candidate')}</div></div>`;
-    const relative = item.screenshot.split('/').slice(-2).join('/');
-    const src = `/api/runs/${runId}/image?path=${encodeURIComponent(relative)}`;
-    return `<div class="candidate"><img src="${src}" alt="Ad candidate" /><div class="muted">${esc(item.selector)}</div><div class="muted">${esc(`${item.bbox?.width || '-'} × ${item.bbox?.height || '-'}`)}</div></div>`;
-  }).join('');
+  return evidence.map(item => { if (!item.screenshot) return `<div class="candidate"><div class="muted">${esc(item.selector || item.error || 'Candidate')}</div></div>`; const relative = item.screenshot.split('/').slice(-2).join('/'); const src = `/api/runs/${runId}/image?path=${encodeURIComponent(relative)}`; return `<div class="candidate"><img src="${src}" alt="Ad candidate" /><div class="muted">${esc(item.selector)}</div><div class="muted">${esc(`${item.bbox?.width || '-'} × ${item.bbox?.height || '-'}`)}</div></div>`; }).join('');
 }
-
+function renderExports(target) {
+  const encoded = encodeURIComponent(target);
+  $('exports').innerHTML = `<a href="/api/history/report?target=${encoded}" target="_blank"><button type="button">HTML report</button></a><a href="/api/history/report.pdf?target=${encoded}" target="_blank"><button type="button" class="secondary">PDF report</button></a><a href="/api/history/intelligence?target=${encoded}" target="_blank"><button type="button" class="secondary">Intelligence JSON</button></a>`;
+}
 function renderSite(data) {
-  $('siteSummary').classList.remove('hidden');
-  $('sitePages').textContent = data.pages_crawled;
-  $('siteFailed').textContent = data.pages_failed;
-  $('siteDiscovered').textContent = data.pages_discovered;
-  $('siteAds').textContent = data.ads_detected;
-  $('siteRecords').textContent = data.normalized_ad_records;
-  $('sitePagesTable').innerHTML = `<table><thead><tr><th>Page</th><th>Status</th><th>Title</th><th>Ads</th><th>Records</th></tr></thead><tbody>${(data.pages || []).map(p =>
-    `<tr><td>${esc(p.final_url)}</td><td>${esc(p.status)}</td><td>${esc(p.title)}</td><td>${p.ad_detection?.signals?.length || 0}</td><td>${p.ad_records?.length || 0}</td></tr>`
-  ).join('')}</tbody></table>`;
-  $('singleResult').classList.add('hidden');
-  const allRecords = (data.pages || []).flatMap(p => p.ad_records || []);
-  const allVisual = (data.pages || []).flatMap(p => (p.visual_evidence || []).map(v => ({...v, run_id: p.run_id})));
-  $('records').innerHTML = renderRecords(allRecords);
-  $('visualGallery').innerHTML = allVisual.length ? allVisual.map(v => renderVisuals(v.run_id, [v])).join('') : '<div class="muted">No visual candidates captured.</div>';
-  $('adsTxt').textContent = JSON.stringify(data.pages?.[0]?.ads_txt || {}, null, 2);
-  $('raw').textContent = JSON.stringify(data, null, 2);
+  $('siteSummary').classList.remove('hidden'); $('sitePages').textContent=data.pages_crawled; $('siteFailed').textContent=data.pages_failed; $('siteDiscovered').textContent=data.pages_discovered; $('siteAds').textContent=data.ads_detected; $('siteRecords').textContent=data.normalized_ad_records;
+  $('sitePagesTable').innerHTML=`<table><thead><tr><th>Page</th><th>Status</th><th>Title</th><th>Ads</th><th>Records</th></tr></thead><tbody>${(data.pages||[]).map(p=>`<tr><td>${esc(p.final_url)}</td><td>${esc(p.status)}</td><td>${esc(p.title)}</td><td>${p.ad_detection?.signals?.length||0}</td><td>${p.ad_records?.length||0}</td></tr>`).join('')}</tbody></table>`;
+  $('singleResult').classList.add('hidden'); const allRecords=(data.pages||[]).flatMap(p=>p.ad_records||[]); const allVisual=(data.pages||[]).flatMap(p=>(p.visual_evidence||[]).map(v=>({...v,run_id:p.run_id}))); $('records').innerHTML=renderRecords(allRecords); $('visualGallery').innerHTML=allVisual.length?allVisual.map(v=>renderVisuals(v.run_id,[v])).join(''):'<div class="muted">No visual candidates captured.</div>'; $('adsTxt').textContent=JSON.stringify(data.pages?.[0]?.ads_txt||{},null,2); $('raw').textContent=JSON.stringify(data,null,2); renderExports(url.value.trim());
 }
-
 function renderSingle(data) {
-  $('siteSummary').classList.add('hidden');
-  $('singleResult').classList.remove('hidden');
-  $('pageTitle').textContent = data.title || '(untitled)';
-  $('pageUrl').textContent = data.final_url;
-  $('http').textContent = data.status ?? '-';
-  $('duration').textContent = `${data.elapsed_ms} ms`;
-  $('networkSignals').textContent = data.ad_detection?.network_signal_count ?? 0;
-  $('domSignals').textContent = data.ad_detection?.dom_signal_count ?? 0;
-  $('adRecords').textContent = (data.ad_records || []).length;
-  $('visualCount').textContent = (data.visual_evidence || []).length;
-  $('technologies').innerHTML = (data.ad_detection?.technologies || []).map(x => `<span class="pill">${esc(x)}</span>`).join('') || '<span class="muted">None detected</span>';
-  $('runtime').textContent = JSON.stringify(data.runtime_ads || {}, null, 2);
-  $('adsTxt').textContent = JSON.stringify(data.ads_txt || {}, null, 2);
-  $('records').innerHTML = renderRecords(data.ad_records || []);
-  $('visualGallery').innerHTML = renderVisuals(data.run_id, data.visual_evidence || []);
-  $('raw').textContent = JSON.stringify(data, null, 2);
-  $('screenshot').src = `/api/runs/${data.run_id}/artifact/screenshot`;
+  $('siteSummary').classList.add('hidden'); $('singleResult').classList.remove('hidden'); $('pageTitle').textContent=data.title||'(untitled)'; $('pageUrl').textContent=data.final_url; $('http').textContent=data.status??'-'; $('duration').textContent=`${data.elapsed_ms} ms`; $('networkSignals').textContent=data.ad_detection?.network_signal_count??0; $('domSignals').textContent=data.ad_detection?.dom_signal_count??0; $('adRecords').textContent=(data.ad_records||[]).length; $('visualCount').textContent=(data.visual_evidence||[]).length; $('technologies').innerHTML=(data.ad_detection?.technologies||[]).map(x=>`<span class="pill">${esc(x)}</span>`).join('')||'<span class="muted">None detected</span>'; $('runtime').textContent=JSON.stringify(data.runtime_ads||{},null,2); $('adsTxt').textContent=JSON.stringify(data.ads_txt||{},null,2); $('records').innerHTML=renderRecords(data.ad_records||[]); $('visualGallery').innerHTML=renderVisuals(data.run_id,data.visual_evidence||[]); $('raw').textContent=JSON.stringify(data,null,2); $('screenshot').src=`/api/runs/${data.run_id}/artifact/screenshot`; renderExports(new URL(data.final_url).origin); lastData=data;
 }
-
-$('crawl').addEventListener('click', async () => {
-  const button = $('crawl');
-  const url = $('url').value.trim();
-  if (!url) return;
-  button.disabled = true;
-  $('status').className = 'status';
-  $('status').textContent = $('modeSite').checked ? 'Crawling site...' : 'Crawling page...';
-  try {
-    const site = $('modeSite').checked;
-    const body = site
-      ? { url, max_pages: Number($('maxPages').value), max_depth: Number($('maxDepth').value), wait_ms: 1500, enrich_landing_pages: $('landing').checked, max_landing_destinations: 10 }
-      : {url, trace: $('trace').checked, enrich_landing_pages: $('landing').checked, max_landing_destinations: 10};
-    const response = await fetch(site ? '/api/site-crawl' : '/api/crawl', {
-      method: 'POST',
-      headers: {'content-type': 'application/json'},
-      body: JSON.stringify(body)
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || 'Crawl failed');
-    $('status').className = 'status ok';
-    $('status').textContent = site ? `Complete: ${data.pages_crawled} pages crawled` : `Complete: ${data.run_id}`;
-    $('result').hidden = false;
-    if (site) renderSite(data);
-    else renderSingle(data);
-  } catch (error) {
-    $('status').className = 'status error';
-    $('status').textContent = error.message || String(error);
-  } finally {
-    button.disabled = false;
-  }
-});
+async function refreshMonitors() {
+  try { const response=await fetch('/api/monitors'); const data=await response.json(); if(!response.ok) throw new Error(data.detail||'Failed to load monitors'); $('monitors').innerHTML=data.monitors.length?`<table><thead><tr><th>Target</th><th>Devices</th><th>Interval</th><th>Status</th><th>Actions</th></tr></thead><tbody>${data.monitors.map(m=>`<tr><td>${esc(m.target)}</td><td>${esc(m.device)}</td><td>${esc(m.interval_minutes)} min</td><td>${m.enabled?'Enabled':'Disabled'}</td><td><button type="button" onclick="runMonitor('${esc(m.monitor_id)}')">Run</button> <button type="button" class="secondary" onclick="toggleMonitor('${esc(m.monitor_id)}',${!m.enabled})">${m.enabled?'Disable':'Enable'}</button> <button type="button" class="secondary" onclick="showAlerts('${esc(m.monitor_id)}')">Alerts</button></td></tr>`).join('')}</tbody></table>`:'<div class="muted">No monitors configured.</div>'; } catch(e) { $('monitorStatus').className='status error'; $('monitorStatus').textContent=e.message; }
+}
+async function createMonitor() {
+  try { const interval=Math.max(60,Number($('monitorInterval').value)||60); const response=await fetch('/api/monitors',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url:$('url').value.trim(),device:$('monitorDevice').value,interval_minutes:interval,enabled:true})}); const data=await response.json(); if(!response.ok) throw new Error(data.detail||'Failed to create monitor'); $('monitorStatus').className='status ok'; $('monitorStatus').textContent=`Monitor created: ${data.monitor_id}`; await refreshMonitors(); } catch(e) { $('monitorStatus').className='status error'; $('monitorStatus').textContent=e.message; }
+}
+async function toggleMonitor(id, enabled) { const response=await fetch(`/api/monitors/${id}`,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({enabled})}); if(!response.ok){const d=await response.json(); throw new Error(d.detail||'Update failed');} await refreshMonitors(); }
+async function runMonitor(id) { $('monitorStatus').className='status'; $('monitorStatus').textContent='Running monitor...'; try { const response=await fetch(`/api/monitors/${id}/run`,{method:'POST'}); const data=await response.json(); if(!response.ok) throw new Error(data.detail||'Monitor run failed'); $('monitorStatus').className=data.alerts?.length?'status warn':'status ok'; $('monitorStatus').textContent=`Run complete: ${data.alerts?.length||0} new alert(s)`; await refreshMonitors(); } catch(e){ $('monitorStatus').className='status error'; $('monitorStatus').textContent=e.message; } }
+async function showAlerts(id) { try { const response=await fetch(`/api/monitors/${id}/alerts`); const data=await response.json(); if(!response.ok) throw new Error(data.detail||'Failed to load alerts'); $('monitorStatus').className='status'; $('monitorStatus').textContent=data.count?`${data.count} alert(s) stored.`:'No alerts stored.'; } catch(e){ $('monitorStatus').className='status error'; $('monitorStatus').textContent=e.message; } }
+$('createMonitor').addEventListener('click',createMonitor); $('refreshMonitors').addEventListener('click',refreshMonitors);
+$('crawl').addEventListener('click', async () => { const button=$('crawl'); const url=$('url').value.trim(); if(!url)return; button.disabled=true; $('status').className='status'; $('status').textContent=$('modeSite').checked?'Crawling site...':'Crawling page...'; try { const site=$('modeSite').checked; const body=site?{url,max_pages:Number($('maxPages').value),max_depth:Number($('maxDepth').value),wait_ms:1500,enrich_landing_pages:$('landing').checked,max_landing_destinations:10}:{url,trace:$('trace').checked,enrich_landing_pages:$('landing').checked,max_landing_destinations:10}; const response=await fetch(site?'/api/site-crawl':'/api/crawl',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); const data=await response.json(); if(!response.ok)throw new Error(data.detail||'Crawl failed'); $('status').className='status ok'; $('status').textContent=site?`Complete: ${data.pages_crawled} pages crawled`:`Complete: ${data.run_id}`; $('result').hidden=false; if(site)renderSite(data);else renderSingle(data); } catch(error){ $('status').className='status error'; $('status').textContent=error.message||String(error); } finally{button.disabled=false;} });
+refreshMonitors();
 </script>
 </body>
 </html>
