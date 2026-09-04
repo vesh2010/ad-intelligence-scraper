@@ -5,9 +5,16 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from .crawler.crawler import CrawlError, SiteCrawler
-from .monitor_execution import execute_monitor
-from .monitoring import MonitorStore, create_monitor_target
 from .history_store import HistoryStore
+from .monitor_execution import execute_monitor
+from .monitor_scheduler import next_run_at
+from .monitoring import MonitorStore, create_monitor_target
+
+
+def _with_schedule(target: dict[str, Any]) -> dict[str, Any]:
+    result = dict(target)
+    result["next_run_at"] = next_run_at(result)
+    return result
 
 
 def build_monitor_router(crawler: SiteCrawler, history_store: HistoryStore, monitor_store: MonitorStore) -> APIRouter:
@@ -15,7 +22,7 @@ def build_monitor_router(crawler: SiteCrawler, history_store: HistoryStore, moni
 
     @router.get("")
     async def list_monitors() -> dict[str, Any]:
-        targets = monitor_store.list_targets()
+        targets = [_with_schedule(target) for target in monitor_store.list_targets()]
         return {"monitors": targets, "count": len(targets)}
 
     @router.post("")
@@ -30,14 +37,14 @@ def build_monitor_router(crawler: SiteCrawler, history_store: HistoryStore, moni
         except (TypeError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         monitor_store.upsert(target)
-        return target
+        return _with_schedule(target)
 
     @router.get("/{monitor_id}")
     async def get_monitor(monitor_id: str) -> dict[str, Any]:
         target = monitor_store.get(monitor_id)
         if not target:
             raise HTTPException(status_code=404, detail="Monitor not found")
-        return target
+        return _with_schedule(target)
 
     @router.patch("/{monitor_id}")
     async def update_monitor(monitor_id: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -59,7 +66,7 @@ def build_monitor_router(crawler: SiteCrawler, history_store: HistoryStore, moni
                 raise HTTPException(status_code=422, detail="device must be desktop, mobile, or both")
             target["device"] = payload["device"]
         monitor_store.upsert(target)
-        return target
+        return _with_schedule(target)
 
     @router.delete("/{monitor_id}")
     async def delete_monitor(monitor_id: str) -> dict[str, Any]:
@@ -82,13 +89,7 @@ def build_monitor_router(crawler: SiteCrawler, history_store: HistoryStore, moni
         if not target.get("enabled", True):
             raise HTTPException(status_code=409, detail="Monitor is disabled")
         try:
-            return await execute_monitor(
-                monitor_id,
-                target,
-                crawler=crawler,
-                history_store=history_store,
-                monitor_store=monitor_store,
-            )
+            return await execute_monitor(monitor_id, target, crawler=crawler, history_store=history_store, monitor_store=monitor_store)
         except CrawlError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except Exception as exc:
