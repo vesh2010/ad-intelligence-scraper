@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   SITE_URL: https://economictimes.indiatimes.com/
@@ -77,6 +77,28 @@ jobs:
               raise SystemExit('run_metadata.json has no run_ids')
           print('Verified report runs:', ', '.join(metadata['run_ids']))
           PY
+      - name: Publish dated reports into repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          DATE="$(date -u +%Y-%m-%d)"
+          TARGET="reports/$DATE"
+          rm -rf "$TARGET"
+          mkdir -p "$TARGET"
+          cp -a ci-output/report/. "$TARGET/"
+          find data/runs -name report.pdf -type f -exec cp {} "$TARGET/site-report.pdf" \; -quit
+          find data/runs -name report.html -type f -exec cp {} "$TARGET/site-report.html" \; -quit
+          printf '%s\n' "# Ad Intelligence Report — $DATE" "" "Generated from the latest automated scrape of $SITE_URL." "" "- [HTML report](./index.html)" "- [Site HTML report](./site-report.html)" "- [Site PDF report](./site-report.pdf)" > "$TARGET/README.md"
+          printf '%s\n' "$DATE" > reports/LATEST
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add reports/
+          if git diff --cached --quiet; then
+            echo 'No report changes to publish'
+          else
+            git commit -m "Publish ad intelligence report $DATE [skip ci]"
+            git push
+          fi
       - name: Upload complete report artifact
         uses: actions/upload-artifact@v4
         with:
@@ -89,4 +111,5 @@ jobs:
           echo '## Latest Ad Intelligence Report' >> "$GITHUB_STEP_SUMMARY"
           echo "Site: $SITE_URL" >> "$GITHUB_STEP_SUMMARY"
           echo 'Desktop + mobile: true' >> "$GITHUB_STEP_SUMMARY"
-          echo 'Complete scrape report is available in the workflow artifact.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'A permanent dated copy has been published under reports/YYYY-MM-DD/.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'The complete scrape report is also available in the workflow artifact.' >> "$GITHUB_STEP_SUMMARY"
