@@ -38,11 +38,13 @@ def _confidence_summary(observations: list[dict[str, Any]]) -> list[dict[str, An
 
 def _request_resolution_summary(observations: list[dict[str, Any]]) -> dict[str, Any]:
     resolved: list[dict[str, Any]] = []
+    request_count = 0
     for row in observations:
         network = row.get("network")
         if not isinstance(network, list):
             continue
         requests = resolve_ad_requests([item for item in network if isinstance(item, dict)])
+        request_count += len(requests)
         runtime = row.get("runtime_ads")
         snapshots = runtime.get("snapshots", []) if isinstance(runtime, dict) else []
         latest = snapshots[-1].get("data", {}) if snapshots and isinstance(snapshots[-1], dict) else {}
@@ -61,7 +63,7 @@ def _request_resolution_summary(observations: list[dict[str, Any]]) -> dict[str,
     return {
         "resolved_slots": resolved,
         "resolved_slot_count": len(resolved),
-        "request_count": sum(len(resolve_ad_requests([item for item in row.get("network", []) if isinstance(item, dict)])) for row in observations if isinstance(row.get("network"), list)),
+        "request_count": request_count,
     }
 
 
