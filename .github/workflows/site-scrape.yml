@@ -1,0 +1,157 @@
+name: Site Scrape (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      site_url:
+        description: 'Website URL to crawl (for example https://economictimes.indiatimes.com/)'
+        required: true
+        type: string
+      max_pages:
+        description: 'Maximum same-site pages to crawl'
+        required: false
+        default: '1'
+        type: string
+      max_depth:
+        description: 'Maximum crawl depth'
+        required: false
+        default: '0'
+        type: string
+      both_devices:
+        description: 'Run desktop + mobile comparison'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SITE_URL: ${{ inputs.site_url }}
+      MAX_PAGES: ${{ inputs.max_pages }}
+      MAX_DEPTH: ${{ inputs.max_depth }}
+      BOTH_DEVICES: ${{ inputs.both_devices }}
+      PYTHONPATH: .
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install system tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends tesseract-ocr ffmpeg
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Validate inputs
+        run: |
+          python - <<'PY'
+          from urllib.parse import urlparse
+          import os
+          u = os.environ['SITE_URL']
+          p = urlparse(u)
+          if p.scheme not in {'http', 'https'} or not p.netloc:
+              raise SystemExit(f'Invalid site_url: {u}')
+          for name in ('MAX_PAGES', 'MAX_DEPTH'):
+              value = int(os.environ[name])
+              if value < 0:
+                  raise SystemExit(f'{name} must be >= 0')
+          if int(os.environ['MAX_PAGES']) > 25:
+              raise SystemExit('max_pages must be <= 25 for a manual CI crawl')
+          if int(os.environ['MAX_DEPTH']) > 5:
+              raise SystemExit('max_depth must be <= 5 for a manual CI crawl')
+          print(f"site={u}")
+          print(f"max_pages={os.environ['MAX_PAGES']}, max_depth={os.environ['MAX_DEPTH']}, both_devices={os.environ['BOTH_DEVICES']}")
+          PY
+
+      - name: Run scraper
+        run: |
+          mkdir -p data/runs ci-output
+          python - <<'PY'
+          import json, os, sys
+          from pathlib import Path
+          from app.crawler.crawler import crawl
+          from app.dual_device_crawl import crawl_both_devices
+          from app.site_crawl import crawl_site
+
+          url = os.environ['SITE_URL']
+          max_pages = int(os.environ['MAX_PAGES'])
+          max_depth = int(os.environ['MAX_DEPTH'])
+          both = os.environ['BOTH_DEVICES'].lower() == 'true'
+
+          output = Path('ci-output')
+          if both:
+              result = crawl_both_devices(url)
+          else:
+              result = crawl_site(url, max_pages=max_pages, max_depth=max_depth)
+          (output / 'scrape_result.json').write_text(json.dumps(result, indent=2, default=str), encoding='utf-8')
+          print(json.dumps({
+              'site_url': url,
+              'both_devices': both,
+              'result_type': type(result).__name__,
+              'keys': list(result.keys()) if isinstance(result, dict) else None,
+          }, indent=2))
+          PY
+
+      - name: Collect generated data and reports
+        if: always()
+        run: |
+          python - <<'PY'
+          import json, os, shutil
+          from pathlib import Path
+          root = Path('.')
+          out = Path('ci-output')
+          out.mkdir(exist_ok=True)
+          runs = root / 'data' / 'runs'
+          if runs.exists():
+              shutil.copytree(runs, out / 'runs', dirs_exist_ok=True)
+
+          summary = {
+              'site_url': os.environ.get('SITE_URL'),
+              'max_pages': os.environ.get('MAX_PAGES'),
+              'max_depth': os.environ.get('MAX_DEPTH'),
+              'both_devices': os.environ.get('BOTH_DEVICES'),
+              'artifact_note': 'All files under ci-output are raw scraper artifacts produced by this workflow run.'
+          }
+          (out / 'README.txt').write_text(
+              'Ad Intelligence Scraper CI result\n\n'
+              'scrape_result.json: top-level crawl result.\n'
+              'runs/: raw run artifacts including HTML, screenshots, network data, ad records, OCR/visual evidence and reports when generated.\n'
+              'This artifact is intended for inspection and for feeding the same data model into the web UI.\n', encoding='utf-8')
+          (out / 'run_metadata.json').write_text(json.dumps(summary, indent=2), encoding='utf-8')
+          PY
+          find ci-output -maxdepth 3 -type f | sort | head -200
+
+      - name: Upload scrape artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ad-intelligence-scrape-${{ github.run_id }}
+          path: ci-output/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Publish summary
+        if: always()
+        run: |
+          echo "## Ad Intelligence Scrape" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Site:** $SITE_URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Max pages:** $MAX_PAGES  " >> "$GITHUB_STEP_SUMMARY"
+          echo "**Max depth:** $MAX_DEPTH  " >> "$GITHUB_STEP_SUMMARY"
+          echo "**Desktop + mobile:** $BOTH_DEVICES" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Download the **ad-intelligence-scrape-${{ github.run_id }}** artifact above to inspect the complete JSON/report/screenshot output." >> "$GITHUB_STEP_SUMMARY"
