@@ -51,25 +51,13 @@ def _dom_urls(slot_dom: Any) -> tuple[list[str], list[str], list[str]]:
 
 def _bid_evidence(raw: dict[str, Any]) -> BidEvidence:
     return BidEvidence(
-        bidder=raw.get("bidder"),
-        ad_id=raw.get("ad_id"),
-        creative_id=raw.get("creative_id"),
-        width=raw.get("width"),
-        height=raw.get("height"),
-        size=raw.get("size"),
-        cpm=raw.get("cpm"),
-        currency=raw.get("currency"),
-        deal_id=raw.get("deal_id"),
-        media_type=raw.get("media_type"),
-        rendered=bool(raw.get("rendered")),
-        advertiser_domains=list(raw.get("advertiser_domains") or []),
-        advertiser_id=raw.get("advertiser_id"),
-        advertiser_name=raw.get("advertiser_name"),
-        brand_id=raw.get("brand_id"),
-        brand_name=raw.get("brand_name"),
-        network_id=raw.get("network_id"),
-        network_name=raw.get("network_name"),
-        demand_source=raw.get("demand_source"),
+        bidder=raw.get("bidder"), ad_id=raw.get("ad_id"), creative_id=raw.get("creative_id"),
+        width=raw.get("width"), height=raw.get("height"), size=raw.get("size"), cpm=raw.get("cpm"),
+        currency=raw.get("currency"), deal_id=raw.get("deal_id"), media_type=raw.get("media_type"),
+        rendered=bool(raw.get("rendered")), advertiser_domains=list(raw.get("advertiser_domains") or []),
+        advertiser_id=raw.get("advertiser_id"), advertiser_name=raw.get("advertiser_name"),
+        brand_id=raw.get("brand_id"), brand_name=raw.get("brand_name"), network_id=raw.get("network_id"),
+        network_name=raw.get("network_name"), demand_source=raw.get("demand_source"),
         adserver_targeting=raw.get("adserver_targeting") if isinstance(raw.get("adserver_targeting"), dict) else None,
     )
 
@@ -111,11 +99,7 @@ def reconcile_ad_records(
 
     dom_signals = [signal for signal in getattr(ad_detection, "signals", []) if signal.signal_type == "dom"]
     dom_by_key = {_signal_key(signal): signal for signal in dom_signals}
-    evidence_by_key = {
-        _evidence_key(item): item
-        for item in visual_evidence
-        if item.get("id") or item.get("selector")
-    }
+    evidence_by_key = {_evidence_key(item): item for item in visual_evidence if item.get("id") or item.get("selector")}
 
     records: list[AdRecord] = []
     covered_keys: set[str] = set()
@@ -135,8 +119,7 @@ def reconcile_ad_records(
         ad_type, ad_format = classify_ad_type(
             width=getattr(slot_dom, "width", None) or (winning.width if winning else None),
             height=getattr(slot_dom, "height", None) or (winning.height if winning else None),
-            position_mode=getattr(slot_dom, "position_mode", None),
-            text=getattr(slot_dom, "text", None),
+            position_mode=getattr(slot_dom, "position_mode", None), text=getattr(slot_dom, "text", None),
             has_video=bool(video_urls) or any(b.media_type in {"video", "outstream"} for b in slot_bids),
             ad_type_hint=winning.media_type if winning else None,
         )
@@ -144,36 +127,23 @@ def reconcile_ad_records(
         evidence = ["runtime.gpt"] + (["runtime.prebid"] if slot_bids else []) + (["dom"] if slot_dom else []) + (["visual"] if placement else [])
         if request_resolution:
             evidence.append("network.ad_request")
-        record = AdRecord(
+        records.append(AdRecord(
             ad_id=_ad_id(["slot", element_id, slot.get("ad_unit_path")]),
-            ad_type=ad_type if ad_type != "unknown" else "gpt_slot",
-            ad_format=ad_format,
+            ad_type=ad_type if ad_type != "unknown" else "gpt_slot", ad_format=ad_format,
             advertiser_name=winning.advertiser_name if winning else None,
             advertiser_id=response_info.get("advertiser_id") or (winning.advertiser_id if winning else None),
-            brand_name=winning.brand_name if winning else None,
-            ad_unit_code=element_id,
-            ad_unit_path=slot.get("ad_unit_path"),
-            element_id=element_id,
-            sizes=slot.get("sizes") or [],
-            bidder=winning.bidder if winning else None,
-            network_name=winning.network_name if winning else None,
-            ad_server="Google Ad Manager/Google Publisher Tag",
-            cpm=winning.cpm if winning else None,
-            currency=winning.currency if winning else None,
-            deal_id=winning.deal_id if winning else None,
+            brand_name=winning.brand_name if winning else None, ad_unit_code=element_id,
+            ad_unit_path=slot.get("ad_unit_path"), element_id=element_id, sizes=slot.get("sizes") or [],
+            bidder=winning.bidder if winning else None, network_name=winning.network_name if winning else None,
+            ad_server="Google Ad Manager/Google Publisher Tag", cpm=winning.cpm if winning else None,
+            currency=winning.currency if winning else None, deal_id=winning.deal_id if winning else None,
             adserver_targeting=slot.get("targeting") or (winning.adserver_targeting if winning else None),
-            destination_urls=hrefs,
-            creative_image_urls=image_urls,
-            creative_video_urls=video_urls,
-            bids=slot_bids,
-            winning_bid=winning,
-            placement=_placement(slot_dom, placement),
+            destination_urls=hrefs, creative_image_urls=image_urls, creative_video_urls=video_urls,
+            bids=slot_bids, winning_bid=winning, placement=_placement(slot_dom, placement),
             above_fold=is_above_fold(y=getattr(slot_dom, "y", None), height=getattr(slot_dom, "height", None)) if slot_dom else None,
-            evidence=evidence,
-            request_resolution=request_resolution,
+            evidence=evidence, request_resolution=request_resolution,
             confidence=min(0.98, 0.80 + (0.08 if slot_dom else 0.0) + (0.05 if response_info else 0.0) + (0.05 if winning else 0.0)),
-        )
-        records.append(record)
+        ))
         if element_id:
             covered_keys.add(dom_key)
 
@@ -186,28 +156,18 @@ def reconcile_ad_records(
         if key in covered_bid_keys:
             continue
         ad_type, ad_format = classify_ad_type(width=bid.width, height=bid.height, has_video=bid.media_type in {"video", "outstream"}, ad_type_hint=bid.media_type)
-        records.append(
-            AdRecord(
-                ad_id=_ad_id(["winner", raw.get("ad_unit_code"), raw.get("bidder"), raw.get("ad_id"), raw.get("creative_id")]),
-                ad_type=ad_type if ad_type != "unknown" else "prebid_winner",
-                ad_format=ad_format,
-                advertiser_name=bid.advertiser_name,
-                advertiser_id=bid.advertiser_id,
-                brand_name=bid.brand_name,
-                ad_unit_code=raw.get("ad_unit_code"),
-                sizes=[{"width": bid.width, "height": bid.height}] if bid.width and bid.height else [],
-                bidder=bid.bidder,
-                network_name=bid.network_name,
-                cpm=bid.cpm,
-                currency=bid.currency,
-                deal_id=bid.deal_id,
-                adserver_targeting=bid.adserver_targeting,
-                bids=[bid],
-                winning_bid=bid,
-                evidence=["runtime.prebid"],
-                confidence=0.86,
-            )
-        )
+        request_resolution = _resolution(raw, resolved_requests)
+        evidence = ["runtime.prebid"] + (["network.ad_request"] if request_resolution else [])
+        records.append(AdRecord(
+            ad_id=_ad_id(["winner", raw.get("ad_unit_code"), raw.get("bidder"), raw.get("ad_id"), raw.get("creative_id")]),
+            ad_type=ad_type if ad_type != "unknown" else "prebid_winner", ad_format=ad_format,
+            advertiser_name=bid.advertiser_name, advertiser_id=bid.advertiser_id, brand_name=bid.brand_name,
+            ad_unit_code=raw.get("ad_unit_code"), ad_unit_path=raw.get("ad_unit_path"), element_id=raw.get("element_id"),
+            sizes=[{"width": bid.width, "height": bid.height}] if bid.width and bid.height else [], bidder=bid.bidder,
+            network_name=bid.network_name, cpm=bid.cpm, currency=bid.currency, deal_id=bid.deal_id,
+            adserver_targeting=bid.adserver_targeting, bids=[bid], winning_bid=bid, evidence=evidence,
+            request_resolution=request_resolution, confidence=0.86 + (0.05 if request_resolution else 0.0),
+        ))
 
     seen_dom_keys: set[str] = set()
     for signal in dom_signals:
@@ -217,28 +177,15 @@ def reconcile_ad_records(
         seen_dom_keys.add(key)
         hrefs, image_urls, video_urls = _dom_urls(signal)
         evidence = evidence_by_key.get(key)
-        ad_type, ad_format = classify_ad_type(
-            width=signal.width,
-            height=signal.height,
-            position_mode=signal.position_mode,
-            text=signal.text,
-            has_video=bool(video_urls),
-        )
-        records.append(
-            AdRecord(
-                ad_id=_ad_id(["dom", key, signal.selector]),
-                ad_type="dom_candidate" if ad_type == "unknown" else ad_type,
-                ad_format=ad_format,
-                element_id=signal.id,
-                sizes=[{"width": signal.width, "height": signal.height}] if signal.width and signal.height else [],
-                destination_urls=hrefs,
-                creative_image_urls=image_urls,
-                creative_video_urls=video_urls,
-                placement=_placement(signal, evidence),
-                above_fold=is_above_fold(y=signal.y, height=signal.height),
-                evidence=["dom"] + (["visual"] if evidence else []),
-                confidence=0.62 + (0.10 if evidence else 0.0),
-            )
-        )
+        ad_type, ad_format = classify_ad_type(width=signal.width, height=signal.height, position_mode=signal.position_mode,
+                                               text=signal.text, has_video=bool(video_urls))
+        records.append(AdRecord(
+            ad_id=_ad_id(["dom", key, signal.selector]), ad_type="dom_candidate" if ad_type == "unknown" else ad_type,
+            ad_format=ad_format, element_id=signal.id,
+            sizes=[{"width": signal.width, "height": signal.height}] if signal.width and signal.height else [],
+            destination_urls=hrefs, creative_image_urls=image_urls, creative_video_urls=video_urls,
+            placement=_placement(signal, evidence), above_fold=is_above_fold(y=signal.y, height=signal.height),
+            evidence=["dom"] + (["visual"] if evidence else []), confidence=0.62 + (0.10 if evidence else 0.0),
+        ))
 
     return records
