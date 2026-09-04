@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -8,6 +9,27 @@ from fastapi.responses import HTMLResponse, Response
 from .report_html import render_html_report
 from .report_intelligence import build_report_intelligence
 from .report_pdf import render_pdf_report
+
+
+def _campaign_key(record: dict[str, Any]) -> str:
+    """Create the same kind of stable observable identity used by persisted snapshots."""
+    values = [
+        record.get("brand_name"),
+        record.get("advertiser_name"),
+        record.get("product_name"),
+        record.get("landing_page_url"),
+        *(record.get("destination_urls") or []),
+    ]
+    normalized = [str(value).strip().lower().rstrip("/") for value in values if value]
+    if not normalized:
+        normalized = [
+            str(record.get("ad_type") or ""),
+            str(record.get("ad_format") or ""),
+            str(record.get("ad_unit_code") or ""),
+            str(record.get("element_id") or ""),
+        ]
+    raw = "|".join(value for value in normalized if value)
+    return "campaign_" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:20] if raw else ""
 
 
 def _observations(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -26,6 +48,8 @@ def _observations(payload: dict[str, Any]) -> list[dict[str, Any]]:
             row.setdefault("device", page.get("device", "desktop"))
             row.setdefault("target_url", page.get("final_url") or page.get("url"))
             row.setdefault("run_id", page.get("run_id"))
+            if not row.get("campaign_key") and not row.get("ad_id"):
+                row["campaign_key"] = _campaign_key(row)
             rows.append(row)
     return rows
 
