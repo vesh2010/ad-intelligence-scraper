@@ -7,31 +7,42 @@ on:
 
 permissions:
   contents: read
+  pages: write
+  id-token: write
+
+env:
+  SITE_URL: https://economictimes.indiatimes.com/
+  MAX_PAGES: '1'
+  MAX_DEPTH: '0'
+  BOTH_DEVICES: 'true'
+  PYTHONPATH: backend
 
 jobs:
   report:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      SITE_URL: https://economictimes.indiatimes.com/
-      MAX_PAGES: '1'
-      MAX_DEPTH: '0'
-      BOTH_DEVICES: 'true'
-      PYTHONPATH: .:backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Install system tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends tesseract-ocr ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr ffmpeg
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r backend/requirements.txt
           python -m playwright install --with-deps chromium
+      - name: Validate and compile
+        run: |
+          python -m compileall -q scripts backend/app
+          python - <<'PY'
+          import os
+          from urllib.parse import urlparse
+          p = urlparse(os.environ['SITE_URL'])
+          if p.scheme not in {'http', 'https'} or not p.netloc:
+              raise SystemExit('Invalid site_url')
+          PY
       - name: Run complete report scrape with retries
         shell: bash
         run: |
@@ -49,51 +60,44 @@ jobs:
             fi
             sleep 10
           done
-      - name: Build UI-compatible report bundle
-        run: |
-          mkdir -p ci-output/latest-report
-          cp -a data/runs/. ci-output/latest-report/
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          runs = sorted(Path('data/runs').glob('*/result.json'))
-          if not runs:
-              raise SystemExit('No crawl result was generated')
-          latest = runs[-1].parent.name
-          payload = json.loads(runs[-1].read_text())
-          (Path('ci-output/latest-report') / 'latest_run.json').write_text(
-              json.dumps({'run_id': latest, 'result': payload}, indent=2), encoding='utf-8'
-          )
-          (Path('ci-output/latest-report') / 'UI_REPORT_URL.txt').write_text(
-              f'/api/runs/{latest}/report.html\n/api/runs/{latest}/report.pdf\n/api/runs/{latest}/intelligence\n', encoding='utf-8'
-          )
-          PY
-      - name: Verify report completeness
+      - name: Verify complete report
         run: |
           test -s ci-output/scrape_result.json
           test -s ci-output/run_metadata.json
-          test -n "$(find ci-output/latest-report -name result.json -type f -print -quit)"
-          test -n "$(find ci-output/latest-report -name page.html -type f -print -quit)"
-          test -n "$(find ci-output/latest-report -name screenshot.png -type f -print -quit)"
+          test -s ci-output/report/index.html
+          test -n "$(find data/runs -name result.json -type f -print -quit)"
+          test -n "$(find data/runs -name page.html -type f -print -quit)"
+          test -n "$(find data/runs -name screenshot.png -type f -print -quit)"
+          test -n "$(find data/runs -name report.html -type f -print -quit)"
+          test -n "$(find data/runs -name report.pdf -type f -print -quit)"
+          test -n "$(find data/runs -name intelligence.json -type f -print -quit)"
           python - <<'PY'
           import json
           from pathlib import Path
-          latest = json.loads(next(Path('ci-output/latest-report').glob('latest_run.json')).read_text())
-          result = latest['result']
-          assert result.get('url'), 'Missing crawl URL'
-          assert 'ad_records' in result, 'Missing normalized ad records'
-          print('Verified UI-compatible latest run:', latest['run_id'])
+          metadata = json.loads(Path('ci-output/run_metadata.json').read_text())
+          if not metadata.get('run_ids'):
+              raise SystemExit('run_metadata.json has no run_ids')
+          print('Verified report runs:', ', '.join(metadata['run_ids']))
           PY
-      - name: Upload complete report
+      - name: Upload complete report artifact
         uses: actions/upload-artifact@v4
         with:
           name: latest-ad-intelligence-report
           path: ci-output/
           if-no-files-found: error
           retention-days: 14
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ci-output/report
+      - name: Deploy report to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
       - name: Job summary
         run: |
           echo '## Latest Ad Intelligence Report' >> "$GITHUB_STEP_SUMMARY"
           echo "Site: $SITE_URL" >> "$GITHUB_STEP_SUMMARY"
           echo 'Desktop + mobile: true' >> "$GITHUB_STEP_SUMMARY"
-          echo 'Complete raw crawl + UI-compatible report artifacts uploaded.' >> "$GITHUB_STEP_SUMMARY"
+          echo "Report: ${{ steps.deployment.outputs.page_url }}" >> "$GITHUB_STEP_SUMMARY"
