@@ -36,6 +36,31 @@ def test_detects_network_cpm_and_continuation():
     assert unchanged["continued_campaigns"] == 1
 
 
+def test_cpm_string_and_numeric_values_are_equivalent():
+    result = detect_changes(
+        [{"campaign_key": "c1", "cpm": "1.20"}],
+        [{"campaign_key": "c1", "cpm": 1.2}],
+    )
+    assert result["continued_campaigns"] == 1
+    assert result["cpm_changes"] == 0
+
+
+def test_detects_creative_added_and_removed():
+    added = detect_changes(
+        [{"campaign_key": "c1"}],
+        [{"campaign_key": "c1", "creative_fingerprint": "new"}],
+    )
+    assert added["creative_added"] == 1
+    assert added["creative_changes"] == 1
+
+    removed = detect_changes(
+        [{"campaign_key": "c1", "creative_fingerprint": "old"}],
+        [{"campaign_key": "c1"}],
+    )
+    assert removed["creative_removed"] == 1
+    assert removed["creative_changes"] == 1
+
+
 def test_detects_adjacent_persisted_snapshots():
     result = detect_history_changes([
         {"observed_at": "2026-09-03T10:00:00Z", "campaign_key": "c1", "ad_unit_code": "top"},
