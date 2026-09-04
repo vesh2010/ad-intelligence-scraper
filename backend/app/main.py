@@ -23,6 +23,7 @@ from .monitoring_routes import build_monitor_router
 from .report_html import render_html_report
 from .report_intelligence import build_report_intelligence
 from .report_pdf import render_pdf_report
+from .run_reports import build_run_report_router
 from .site_crawl import crawl_site
 
 crawler = SiteCrawler()
@@ -75,8 +76,9 @@ async def lifespan(_: FastAPI):
             _scheduler_task = None
 
 
-app = FastAPI(title="Ad Intelligence Scraper", version="0.8.0", lifespan=lifespan)
+app = FastAPI(title="Ad Intelligence Scraper", version="0.9.0", lifespan=lifespan)
 app.include_router(build_monitor_router(crawler, history_store, monitor_store))
+app.include_router(build_run_report_router(crawler.data_root))
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 RUN_ID_RE = re.compile(r"^[0-9a-f]{32}$")
