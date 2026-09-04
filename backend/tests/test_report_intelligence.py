@@ -41,3 +41,23 @@ def test_report_intelligence_rejects_non_object_rows():
         assert str(exc) == "observations must be a list of objects"
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_report_includes_best_advertiser_confidence_per_campaign():
+    result = build_report_intelligence([
+        {"campaign_key": "campaign-1", "brand_name": "Acme", "evidence": ["ocr: ACME"]},
+        {
+            "campaign_key": "campaign-1",
+            "advertiser_name": "Acme Corp",
+            "brand_name": "Acme",
+            "landing_page_url": "https://acme.example/",
+            "network": "Google Ad Manager",
+        },
+    ])
+    assert result["advertiser_confidence"] == [{
+        "campaign_key": "campaign-1",
+        "level": "verified",
+        "score": 90,
+        "signals": ["advertiser_metadata", "brand_metadata", "landing_destination", "ad_tech_signal"],
+        "observation_count": 2,
+    }]
