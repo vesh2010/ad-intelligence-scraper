@@ -23,6 +23,7 @@ def _run(root: Path, run_id: str) -> None:
         counts={}, metadata={}, redirects=[], network=[], console_errors=[], page_errors=[], frames=[], artifacts={},
         ad_records=[
             {
+                "ad_id": "acme-gpt-1",
                 "ad_type": "gpt",
                 "advertiser_name": "Acme Advertiser",
                 "brand_name": "Acme",
