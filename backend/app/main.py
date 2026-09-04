@@ -193,8 +193,10 @@ async def get_run(run_id: str) -> CrawlResult:
 
 @app.get("/api/runs/{run_id}/artifact/{artifact_name}")
 async def get_artifact(run_id: str, artifact_name: str) -> FileResponse:
-    if not RUN_ID_RE.fullmatch(run_id) or artifact_name not in ARTIFACTS:
-        raise HTTPException(status_code=400, detail="Invalid run or artifact")
+    if not RUN_ID_RE.fullmatch(run_id):
+        raise HTTPException(status_code=400, detail="Invalid run ID")
+    if artifact_name not in ARTIFACTS:
+        raise HTTPException(status_code=404, detail="Artifact not found")
     path = crawler.data_root / run_id / ARTIFACTS[artifact_name]
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Artifact not found")
