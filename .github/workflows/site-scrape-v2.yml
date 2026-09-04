@@ -1,0 +1,86 @@
+name: Site Scrape (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      site_url:
+        description: 'Website URL to crawl'
+        required: true
+        type: string
+      max_pages:
+        description: 'Maximum same-site pages'
+        required: false
+        default: '1'
+        type: string
+      max_depth:
+        description: 'Maximum crawl depth'
+        required: false
+        default: '0'
+        type: string
+      both_devices:
+        description: 'Run desktop + mobile for single-page mode'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SITE_URL: ${{ inputs.site_url }}
+      MAX_PAGES: ${{ inputs.max_pages }}
+      MAX_DEPTH: ${{ inputs.max_depth }}
+      BOTH_DEVICES: ${{ inputs.both_devices }}
+      PYTHONPATH: .:backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install system tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends tesseract-ocr ffmpeg
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt
+          python -m playwright install --with-deps chromium
+      - name: Validate inputs
+        run: |
+          python - <<'PY'
+          import os
+          from urllib.parse import urlparse
+          p = urlparse(os.environ['SITE_URL'])
+          if p.scheme not in {'http', 'https'} or not p.netloc: raise SystemExit('Invalid site_url')
+          if not 1 <= int(os.environ['MAX_PAGES']) <= 25: raise SystemExit('max_pages must be 1..25')
+          if not 0 <= int(os.environ['MAX_DEPTH']) <= 5: raise SystemExit('max_depth must be 0..5')
+          PY
+      - name: Run scraper
+        run: python scripts/ci_site_scrape.py
+      - name: Collect raw data
+        if: always()
+        run: |
+          mkdir -p ci-output
+          if [ -d data/runs ]; then cp -a data/runs ci-output/; fi
+          printf '%s\n' 'Ad Intelligence Scraper CI result' '' 'scrape_result.json is the top-level result.' 'runs/ contains raw JSON, HTML, screenshots, network, ad, OCR/visual, media and report artifacts.' > ci-output/README.txt
+          find ci-output -type f | sort | head -300
+      - name: Upload complete result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ad-intelligence-scrape-${{ github.run_id }}
+          path: ci-output/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Job summary
+        if: always()
+        run: |
+          echo '## Ad Intelligence Scrape' >> "$GITHUB_STEP_SUMMARY"
+          echo "Site: $SITE_URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "Pages: $MAX_PAGES | Depth: $MAX_DEPTH | Desktop + mobile: $BOTH_DEVICES" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Complete results are available in the uploaded artifact.' >> "$GITHUB_STEP_SUMMARY"
