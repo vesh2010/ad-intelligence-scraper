@@ -36,7 +36,7 @@ def test_site_report_endpoints():
 
     html = client.post("/api/site-crawl/report.html", json=payload)
     assert html.status_code == 200
-    assert "Acme" in html.text
+    assert "Competitor / brand frequency" in html.text
 
     pdf = client.post("/api/site-crawl/report.pdf", json=payload)
     assert pdf.status_code == 200
@@ -47,7 +47,9 @@ def test_site_report_endpoints():
     assert intelligence.status_code == 200
     body = intelligence.json()
     assert body["observation_count"] == 1
-    assert body["competitors"][0]["brand_name"] == "Acme"
+    assert body["campaigns"]["campaigns"][0]["brand_name"] == "Acme"
+    assert body["campaigns"]["campaigns"][0]["advertiser_name"] == "Acme Advertiser"
+    assert body["campaigns"]["competitors"][0]["brand_name"] == "Acme"
 
 
 def test_site_report_rejects_invalid_pages():
