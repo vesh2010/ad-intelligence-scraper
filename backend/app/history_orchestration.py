@@ -21,6 +21,7 @@ def persist_crawl_result(
     *,
     session_id: str | None = None,
     observed_at: str | None = None,
+    monitor_id: str | None = None,
 ) -> dict[str, Any]:
     """Persist one crawl as a grouped historical observation."""
     session = session_id or uuid4().hex
@@ -31,6 +32,8 @@ def persist_crawl_result(
         row["crawl_session_id"] = session
         row["run_id"] = result.run_id
         row["target_url"] = target
+        if monitor_id:
+            row["monitor_id"] = monitor_id
     stored = store.append(target, observations)
     return {
         **stored,
@@ -38,6 +41,7 @@ def persist_crawl_result(
         "observed_at": timestamp,
         "run_id": result.run_id,
         "device": result.device,
+        "monitor_id": monitor_id,
     }
 
 
@@ -48,6 +52,7 @@ def persist_dual_crawl_result(
     *,
     session_id: str | None = None,
     observed_at: str | None = None,
+    monitor_id: str | None = None,
 ) -> dict[str, Any]:
     """Persist desktop/mobile crawl output under one shared monitoring session."""
     session = session_id or uuid4().hex
@@ -63,6 +68,8 @@ def persist_dual_crawl_result(
             row["crawl_session_id"] = session
             row["run_id"] = result.run_id
             row["target_url"] = target
+            if monitor_id:
+                row["monitor_id"] = monitor_id
             observations.append(row)
     stored = store.append(target, observations)
     return {
@@ -70,6 +77,7 @@ def persist_dual_crawl_result(
         "crawl_session_id": session,
         "observed_at": timestamp,
         "devices": ["desktop", "mobile"],
+        "monitor_id": monitor_id,
     }
 
 
