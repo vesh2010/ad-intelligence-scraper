@@ -17,13 +17,29 @@ def application_root() -> Path:
     return Path(__file__).resolve().parent
 
 
+def bundle_root() -> Path:
+    return Path(getattr(sys, "_MEIPASS", application_root()))
+
+
 def runtime_root() -> Path:
     root = Path(os.getenv("AD_SCRAPER_DATA_ROOT", application_root() / "data"))
     root.mkdir(parents=True, exist_ok=True)
     return root
 
 
-def wait_for_port(host: str, port: int, timeout: float = 45.0) -> bool:
+def configure_bundled_tools() -> None:
+    browser_root = bundle_root() / "browsers"
+    if browser_root.is_dir():
+        os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(browser_root))
+    tools = bundle_root() / "tools"
+    if tools.is_dir():
+        os.environ["PATH"] = str(tools) + os.pathsep + os.environ.get("PATH", "")
+        tessdata = tools / "tessdata"
+        if tessdata.is_dir():
+            os.environ.setdefault("TESSDATA_PREFIX", str(tessdata))
+
+
+def wait_for_port(host: str, port: int, timeout: float = 60.0) -> bool:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
@@ -35,11 +51,11 @@ def wait_for_port(host: str, port: int, timeout: float = 45.0) -> bool:
 
 
 def main() -> int:
+    configure_bundled_tools()
     os.environ.setdefault("AD_SCRAPER_ENABLE_MONITOR_SCHEDULER", "1")
     os.environ.setdefault("AD_SCRAPER_MONITOR_POLL_SECONDS", "60")
     os.environ.setdefault("AD_SCRAPER_DATA_ROOT", str(runtime_root()))
 
-    # Import after environment setup so the application uses the portable data directory.
     from app.main import app
 
     host = "127.0.0.1"
@@ -47,7 +63,6 @@ def main() -> int:
     server = uvicorn.Server(uvicorn.Config(app, host=host, port=port, log_level="warning", workers=1))
     thread = threading.Thread(target=server.run, name="ad-scraper-server", daemon=True)
     thread.start()
-
     if not wait_for_port(host, port):
         print("Ad Intelligence Scraper could not start.", file=sys.stderr)
         return 1
@@ -55,7 +70,7 @@ def main() -> int:
     url = f"http://{host}:{port}/"
     webbrowser.open(url)
     print(f"Ad Intelligence Scraper is running at {url}")
-    print("Close this window to stop the local server.")
+    print("Keep this window open while using the scraper. Close it to stop the server.")
     try:
         while thread.is_alive():
             time.sleep(1)
