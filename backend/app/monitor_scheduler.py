@@ -29,11 +29,14 @@ def _interval_minutes(target: dict[str, Any]) -> int:
     return max(MIN_INTERVAL_MINUTES, value)
 
 
-def _utc_now(clock: Callable[[], datetime]) -> datetime:
-    value = clock()
+def _normalize_datetime(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
+
+
+def _utc_now(clock: Callable[[], datetime]) -> datetime:
+    return _normalize_datetime(clock())
 
 
 def is_due(target: dict[str, Any], *, now: datetime) -> bool:
@@ -42,8 +45,7 @@ def is_due(target: dict[str, Any], *, now: datetime) -> bool:
     last_run = parse_timestamp(target.get("last_run_at"))
     if last_run is None:
         return True
-    current = now if now.tzinfo is not None else now.replace(tzinfo=timezone.utc)
-    return current.astimezone(timezone.utc) >= last_run + timedelta(minutes=_interval_minutes(target))
+    return _normalize_datetime(now) >= last_run + timedelta(minutes=_interval_minutes(target))
 
 
 def next_run_at(target: dict[str, Any], *, now: datetime | None = None) -> str | None:
@@ -52,7 +54,8 @@ def next_run_at(target: dict[str, Any], *, now: datetime | None = None) -> str |
         return None
     last_run = parse_timestamp(target.get("last_run_at"))
     if last_run is None:
-        return (now or datetime.now(timezone.utc)).astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z") if (now or datetime.now(timezone.utc)) else None
+        current = _normalize_datetime(now or datetime.now(timezone.utc))
+        return current.replace(microsecond=0).isoformat().replace("+00:00", "Z")
     return (last_run + timedelta(minutes=_interval_minutes(target))).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
