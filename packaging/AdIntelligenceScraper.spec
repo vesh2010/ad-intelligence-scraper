@@ -1,22 +1,23 @@
-# PyInstaller spec for the portable Windows desktop launcher.
 from pathlib import Path
+import os
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 ROOT = Path(__file__).resolve().parents[1]
-PLAYWRIGHT_DATA = Path(__import__('os').environ.get('PLAYWRIGHT_BROWSERS_PATH', ''))
+BROWSERS = ROOT / "packaging" / "browsers"
+TOOLS = ROOT / "packaging" / "tools"
 
-hiddenimports = collect_submodules('playwright') + collect_submodules('uvicorn')
-datas = collect_data_files('playwright')
-
-# The build workflow places Chromium beside the bundled application resources.
-# Keeping the browser external to the one-file extraction directory avoids PyInstaller
-# attempting to execute a browser from an archive. The final artifact is still a single EXE.
+datas = collect_data_files("playwright") + [(str(ROOT / "backend" / "app"), "app")]
+hiddenimports = collect_submodules("playwright") + collect_submodules("uvicorn")
+if BROWSERS.is_dir():
+    datas.append((str(BROWSERS), "browsers"))
+if TOOLS.is_dir():
+    datas.append((str(TOOLS), "tools"))
 
 analysis = Analysis(
-    [str(ROOT / 'desktop_launcher.py')],
-    pathex=[str(ROOT), str(ROOT / 'backend')],
+    [str(ROOT / "desktop_launcher.py")],
+    pathex=[str(ROOT), str(ROOT / "backend")],
     binaries=[],
-    datas=datas + [(str(ROOT / 'backend' / 'app'), 'app')],
+    datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
@@ -24,7 +25,6 @@ analysis = Analysis(
     excludes=[],
     noarchive=False,
 )
-
 pyz = PYZ(analysis.pure)
 exe = EXE(
     pyz,
@@ -32,7 +32,7 @@ exe = EXE(
     analysis.binaries,
     analysis.datas,
     [],
-    name='AdIntelligenceScraper',
+    name="AdIntelligenceScraper",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
