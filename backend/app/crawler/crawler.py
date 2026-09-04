@@ -11,6 +11,7 @@ from playwright.async_api import async_playwright
 from ..ad_models import AdDetectionResult
 from ..ad_pipeline import detect_ads
 from ..ad_reconcile import reconcile_ad_records
+from ..ad_request_resolution import resolve_ad_requests
 from ..ads_txt import fetch_ads_txt
 from ..device_profiles import DEVICE_PROFILES
 from ..frame_dom import collect_frame_dom_candidates
@@ -181,8 +182,17 @@ class SiteCrawler:
                 visual_evidence = await capture_dom_ad_evidence(
                     page, dom_candidates_after_scroll, run_dir
                 )
+                network = list(network_by_request.values())
+                request_resolution = resolve_ad_requests(network)
                 ad_records = reconcile_ad_records(
-                    ad_detection, runtime_snapshots, visual_evidence
+                    ad_detection, runtime_snapshots, visual_evidence, network=network
+                )
+                if request_resolution:
+                    (run_dir / "ad_request_resolution.json").write_text(
+                        json.dumps(request_resolution, indent=2), encoding="utf-8"
+                    )
+                (run_dir / "visual_evidence.json").write_text(
+                    json.dumps(visual_evidence, indent=2), encoding="utf-8"
                 )
                 if request.enrich_landing_pages and ad_records:
                     landing_enrichment = await enrich_ad_records(
@@ -273,6 +283,8 @@ class SiteCrawler:
             "visual_evidence": str(run_dir / "visual_evidence.json"),
             "ad_records": str(run_dir / "ad_records.json"),
         }
+        if (run_dir / "ad_request_resolution.json").is_file():
+            artifacts["ad_request_resolution"] = str(run_dir / "ad_request_resolution.json")
         if request.enrich_landing_pages:
             artifacts["landing_enrichment"] = str(run_dir / "landing_enrichment.json")
         if ads_txt is not None:
