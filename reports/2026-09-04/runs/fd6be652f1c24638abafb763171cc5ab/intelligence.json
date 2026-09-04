@@ -8,8 +8,8 @@
         "product_name": null,
         "observations": 1,
         "observation_share_pct": 33.33,
-        "first_seen": "2026-09-04T17:07:18Z",
-        "last_seen": "2026-09-04T17:07:18Z",
+        "first_seen": "2026-09-04T17:11:54Z",
+        "last_seen": "2026-09-04T17:11:54Z",
         "placement_count": 0,
         "placements": [],
         "formats": [
@@ -38,8 +38,8 @@
         "product_name": null,
         "observations": 1,
         "observation_share_pct": 33.33,
-        "first_seen": "2026-09-04T17:07:18Z",
-        "last_seen": "2026-09-04T17:07:18Z",
+        "first_seen": "2026-09-04T17:11:54Z",
+        "last_seen": "2026-09-04T17:11:54Z",
         "placement_count": 1,
         "placements": [
           "div-gpt-ad-1567824605790-0"
@@ -70,8 +70,8 @@
         "product_name": null,
         "observations": 1,
         "observation_share_pct": 33.33,
-        "first_seen": "2026-09-04T17:07:18Z",
-        "last_seen": "2026-09-04T17:07:18Z",
+        "first_seen": "2026-09-04T17:11:54Z",
+        "last_seen": "2026-09-04T17:11:54Z",
         "placement_count": 0,
         "placements": [],
         "formats": [
@@ -158,7 +158,7 @@
     "cpm_changes": 0,
     "snapshot_count": 1,
     "observed_at": [
-      "2026-09-04T17:07:18Z"
+      "2026-09-04T17:11:54Z"
     ]
   },
   "advertiser_confidence": [
