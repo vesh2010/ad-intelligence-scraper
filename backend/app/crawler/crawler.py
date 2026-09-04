@@ -50,6 +50,19 @@ class SiteCrawler:
         ad_records = []
         landing_enrichment: dict[str, dict[str, object]] = {}
         dom_candidates: list[dict[str, object]] = []
+        network: list[dict[str, object]] = []
+        title = ""
+        metadata: dict[str, str | None] = {"description": None, "canonical": None, "lang": None}
+        counts: dict[str, int] = {"images": 0, "scripts": 0, "links": 0, "iframes": 0}
+        dimensions: dict[str, int] = {
+            "viewport_width": profile.viewport_width,
+            "viewport_height": profile.viewport_height,
+            "document_width": 0,
+            "document_height": 0,
+        }
+        frames: list[str] = []
+        final_url = str(request.url)
+        status: int | None = None
 
         ads_txt: dict[str, object] | None = None
         if request.include_ads_txt:
@@ -147,11 +160,15 @@ class SiteCrawler:
             page.on("requestfailed", on_request_failed)
 
             try:
-                response = await page.goto(
-                    str(request.url),
-                    wait_until="domcontentloaded",
-                    timeout=request.timeout_ms,
-                )
+                try:
+                    response = await page.goto(
+                        str(request.url),
+                        wait_until="domcontentloaded",
+                        timeout=request.timeout_ms,
+                    )
+                except Exception as exc:
+                    raise CrawlError(f"Navigation failed for {request.url}: {exc}") from exc
+                status = response.status if response else None
                 await page.wait_for_timeout(request.wait_ms)
 
                 dom_candidates = await collect_frame_dom_candidates(page)
@@ -216,7 +233,7 @@ class SiteCrawler:
 
                 html = await page.content()
                 network = list(network_by_request.values())
-                await (run_dir / "page.html").write_text(html, encoding="utf-8")
+                (run_dir / "page.html").write_text(html, encoding="utf-8")
                 await page.screenshot(path=str(run_dir / "screenshot.png"), full_page=True)
                 (run_dir / "network.json").write_text(
                     json.dumps(network, indent=2), encoding="utf-8"
@@ -266,7 +283,10 @@ class SiteCrawler:
                 )
                 frames = [frame.url for frame in page.frames]
                 final_url = page.url
-                status = response.status if response else None
+            except CrawlError:
+                raise
+            except Exception as exc:
+                raise CrawlError(f"Crawl failed for {request.url}: {exc}") from exc
             finally:
                 if request.trace:
                     await context.tracing.stop(path=str(run_dir / "trace.zip"))
