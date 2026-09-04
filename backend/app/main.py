@@ -13,6 +13,8 @@ from .device_change import detect_history_changes
 from .dual_device_crawl import crawl_both_devices
 from .history_orchestration import persist_crawl_result, persist_dual_crawl_result
 from .history_store import HistoryStore
+from .monitoring import MonitorStore
+from .monitoring_routes import build_monitor_router
 from .report_html import render_html_report
 from .report_intelligence import build_report_intelligence
 from .report_pdf import render_pdf_report
@@ -21,6 +23,8 @@ from .site_crawl import crawl_site
 app = FastAPI(title="Ad Intelligence Scraper", version="0.8.0")
 crawler = SiteCrawler()
 history_store = HistoryStore()
+monitor_store = MonitorStore()
+app.include_router(build_monitor_router(crawler, history_store, monitor_store))
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 RUN_ID_RE = re.compile(r"^[0-9a-f]{32}$")
@@ -189,8 +193,10 @@ async def get_run(run_id: str) -> CrawlResult:
 
 @app.get("/api/runs/{run_id}/artifact/{artifact_name}")
 async def get_artifact(run_id: str, artifact_name: str) -> FileResponse:
-    if not RUN_ID_RE.fullmatch(run_id) or artifact_name not in ARTIFACTS:
-        raise HTTPException(status_code=400, detail="Invalid run or artifact")
+    if not RUN_ID_RE.fullmatch(run_id):
+        raise HTTPException(status_code=400, detail="Invalid run ID")
+    if artifact_name not in ARTIFACTS:
+        raise HTTPException(status_code=404, detail="Artifact not found")
     path = crawler.data_root / run_id / ARTIFACTS[artifact_name]
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Artifact not found")
