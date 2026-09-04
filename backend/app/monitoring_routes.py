@@ -5,11 +5,9 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from .crawler.crawler import CrawlError, SiteCrawler
-from .crawler.models import CrawlRequest
-from .dual_device_crawl import crawl_both_devices
-from .history_orchestration import persist_crawl_result, persist_dual_crawl_result
+from .monitor_execution import execute_monitor
+from .monitoring import MonitorStore, create_monitor_target
 from .history_store import HistoryStore
-from .monitoring import MonitorStore, build_alerts, create_monitor_target, dedupe_alerts
 
 
 def build_monitor_router(crawler: SiteCrawler, history_store: HistoryStore, monitor_store: MonitorStore) -> APIRouter:
@@ -83,32 +81,17 @@ def build_monitor_router(crawler: SiteCrawler, history_store: HistoryStore, moni
             raise HTTPException(status_code=404, detail="Monitor not found")
         if not target.get("enabled", True):
             raise HTTPException(status_code=409, detail="Monitor is disabled")
-        url = str(target["target"])
-        device = str(target.get("device", "desktop"))
-        options = target.get("crawl_options") if isinstance(target.get("crawl_options"), dict) else {}
-        request = CrawlRequest(url=url, trace=bool(options.get("trace", False)), enrich_landing_pages=bool(options.get("enrich_landing_pages", False)), max_landing_destinations=int(options.get("max_landing_destinations", 10)), device="desktop")
-        previous = history_store.load(url)
         try:
-            if device == "both":
-                crawl_result = await crawl_both_devices(crawler, request)
-                stored = persist_dual_crawl_result(history_store, url, crawl_result)
-            else:
-                request = request.model_copy(update={"device": device})
-                crawl_result = await crawler.crawl(request)
-                stored = persist_crawl_result(history_store, url, crawl_result)
+            return await execute_monitor(
+                monitor_id,
+                target,
+                crawler=crawler,
+                history_store=history_store,
+                monitor_store=monitor_store,
+            )
         except CrawlError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Monitoring run failed: {exc}") from exc
-        current = [row for row in history_store.load(url) if row.get("crawl_session_id") == stored["crawl_session_id"]]
-        previous_sessions = {str(row.get("crawl_session_id")) for row in current}
-        prior = [row for row in previous if str(row.get("crawl_session_id")) not in previous_sessions]
-        if prior:
-            prior_timestamp = max(str(row.get("observed_at") or "") for row in prior)
-            prior = [row for row in prior if str(row.get("observed_at") or "") == prior_timestamp]
-        candidates = build_alerts(monitor_id=monitor_id, target=url, previous=prior, current=current, observed_at=stored["observed_at"])
-        fresh = dedupe_alerts(monitor_store.alerts(monitor_id), candidates)
-        monitor_store.append_alerts(fresh)
-        return {"monitor_id": monitor_id, "crawl": crawl_result, "history": stored, "alerts": fresh}
 
     return router
