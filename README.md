@@ -2,6 +2,10 @@
 
 A browser-based web ad intelligence collector. The pipeline is built incrementally so every stage leaves inspectable evidence for later analysis rather than guessing advertiser identity.
 
+## v1.0.0 status
+
+The v1.0.0 implementation is complete for the defined evidence-first scope. GitHub Actions gates both the Python/browser regression suite and a Docker build/runtime smoke test. The system is production-oriented, but live publisher behavior remains inherently variable and must be interpreted from evidence rather than assumed.
+
 ## Current scope
 
 The current pipeline covers collection, evidence, comparison, monitoring and reporting:
@@ -20,6 +24,7 @@ The current pipeline covers collection, evidence, comparison, monitoring and rep
 - DOM candidate screenshots, geometry and visual evidence
 - bounded local OCR and visual classification
 - discoverable image, video and audio creative asset capture with SSRF/size limits
+- optional FFprobe media metadata inspection in production containers
 - public `ads.txt` retrieval and parsing
 - landing-page enrichment with SSRF protections and bounded destinations
 - stable campaign identity and creative fingerprints
@@ -31,6 +36,7 @@ The current pipeline covers collection, evidence, comparison, monitoring and rep
 - scheduled monitor execution with per-monitor isolation and failure status
 - FastAPI API plus a built-in inspection UI
 - self-contained HTML and vector PDF intelligence reports
+- Docker build/runtime health and API smoke testing
 
 ### Evidence-first identity
 
@@ -77,29 +83,19 @@ Monitor observations are tagged with their `monitor_id`, so two monitors watchin
 - `GET /api/runs/{run_id}/report.html` — report for one stored crawl
 - `GET /api/runs/{run_id}/report.pdf` — PDF report for one stored crawl
 - `GET /api/runs/{run_id}/intelligence` — intelligence JSON for one stored crawl
+- `POST /api/site-crawl/report.html` — report for a bounded site crawl payload
+- `POST /api/site-crawl/report.pdf` — PDF report for a bounded site crawl payload
+- `POST /api/site-crawl/intelligence` — intelligence JSON for a bounded site crawl payload
 - `GET /api/runs/{run_id}` — retrieve a stored crawl result
 - `GET /api/runs/{run_id}/artifact/{artifact_name}` — retrieve a stored crawl artifact
-
-## Example intelligence request
-
-```json
-{
-  "observations": [
-    {
-      "campaign_key": "campaign-1",
-      "brand_name": "Example Brand",
-      "advertiser_name": "Example Advertiser",
-      "device": "desktop",
-      "ad_unit_code": "top-banner",
-      "observed_at": "2026-09-03T10:00:00Z"
-    }
-  ]
-}
-```
 
 ## Persistence
 
 Runtime monitoring data is stored under `data/` using SQLite. `data/history/history.sqlite3` stores observations and `data/monitoring/monitoring.sqlite3` stores monitor targets and alerts. Existing JSON history/monitor files are imported once automatically; JSON paths remain exposed for compatibility, but new writes use SQLite.
+
+## Production container
+
+The Docker image installs Chromium, Tesseract OCR and FFmpeg/FFprobe. The compose deployment mounts `./data` for persistent SQLite databases and crawl artifacts. The image exposes port 8000 and the CI smoke test verifies startup, `/api/health`, and API documentation before cleanup.
 
 ## Run locally
 
@@ -138,17 +134,33 @@ creative_assets/*
 
 ## Media note
 
-The collector can preserve discoverable image/video/audio URLs and bounded copies of public media assets. It does not claim that every video contains a separately extractable song/audio track. Full audio-track extraction from containerized video requires a media decoder pipeline and is intentionally a separate capability.
+The collector can preserve discoverable image/video/audio URLs and bounded copies of public media assets. FFprobe metadata is collected for downloaded video/audio files when available. The system does not claim that every video contains a separately extractable song/audio track; that requires an explicit media-decoder extraction pipeline and is outside the v1.0.0 evidence contract.
 
-## Tests
+## Testing
 
 ```bash
 cd backend
 pytest -q
 ```
 
-CI installs Chromium and Tesseract and executes the browser regression tests plus the pure Python tests. Recent persistence, scheduler, report, historical-change and request-resolution changes are gated by the same GitHub Actions suite.
+CI installs Chromium and Tesseract and executes the browser regression tests plus the pure Python tests. A second GitHub Actions workflow builds the production Docker image, starts it, waits for `/api/health`, verifies `/docs`, and captures diagnostics on failure.
 
-## Current testing limitation
+## Acceptance status
 
-This ChatGPT execution environment has a Chromium binary available for synthetic local browser tests, but DNS access to external sites is unavailable. Consequently, an NDTV Profit crawl itself cannot be honestly marked as live-tested from this environment. The repository's CI is configured to install Chromium so browser tests run in GitHub Actions.
+- Core crawl and ad evidence: complete
+- GPT/Prebid/network resolution: complete
+- Evidence-backed advertiser identity: complete
+- Creative/OCR/media capture: complete within documented bounds
+- Desktop/mobile comparison: complete
+- Historical change intelligence: complete
+- SQLite persistence and monitor isolation: complete
+- Scheduled monitoring and alerts: complete
+- HTML/PDF/report intelligence: complete
+- Site-crawl reporting: complete
+- API and artifact security validation: complete
+- Docker production packaging and smoke test: complete
+- Automated regression CI: green on the latest validated release commits
+
+## Live-site limitation
+
+External publisher pages can change their ad stack, inventory and consent behavior at any time. This environment cannot honestly guarantee a live NDTV Profit crawl from ChatGPT because external DNS access is unavailable here. The repository therefore treats synthetic browser regression, deterministic report tests, and Docker runtime checks as automated acceptance gates rather than fabricating live-site results. When a live publisher crawl is performed in an environment with network access, advertiser identity should still be reported as unknown whenever the publisher does not expose sufficient evidence.
