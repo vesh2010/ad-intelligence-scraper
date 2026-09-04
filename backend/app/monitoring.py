@@ -59,7 +59,8 @@ class MonitorStore:
         for path, destination in ((self.path, targets), (self.alerts_path, alerts)):
             try:
                 payload = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else []
-                destination.extend(x for x in payload if isinstance(x, dict)) if isinstance(payload, list) else None
+                if isinstance(payload, list):
+                    destination.extend(x for x in payload if isinstance(x, dict))
             except (OSError, json.JSONDecodeError):
                 pass
         with db.transaction() as connection:
@@ -101,7 +102,7 @@ class MonitorStore:
     def list_targets(self) -> list[dict[str, Any]]:
         self._ensure_database()
         with self.db.transaction() as db:
-            rows = db.execute("SELECT * FROM monitors ORDER BY created_at, monitor_id").fetchall()
+            rows = db.execute("SELECT * FROM monitors ORDER BY created_at, rowid").fetchall()
         return [self._row(row) for row in rows]
 
     def get(self, monitor_id: str) -> dict[str, Any] | None:
@@ -135,7 +136,10 @@ class MonitorStore:
     def alerts(self, monitor_id: str | None = None) -> list[dict[str, Any]]:
         self._ensure_database()
         with self.db.transaction() as db:
-            rows = db.execute("SELECT * FROM alerts WHERE monitor_id=? ORDER BY observed_at, alert_id", (monitor_id,)).fetchall() if monitor_id else db.execute("SELECT * FROM alerts ORDER BY observed_at, alert_id").fetchall()
+            if monitor_id:
+                rows = db.execute("SELECT * FROM alerts WHERE monitor_id=? ORDER BY observed_at, alert_id", (monitor_id,)).fetchall()
+            else:
+                rows = db.execute("SELECT * FROM alerts ORDER BY observed_at, alert_id").fetchall()
         result = []
         for row in rows:
             item = dict(row)
