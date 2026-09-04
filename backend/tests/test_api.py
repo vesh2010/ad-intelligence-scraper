@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.main import crawler, history_store
+from app.main import crawler, history_store, monitor_store
 
 client = TestClient(app)
 
@@ -101,6 +101,41 @@ def test_persistent_history_api(tmp_path: Path):
 def test_persistent_history_api_validates_observations():
     response = client.post("/api/history", params={"target": "example.com"}, json={"observations": "invalid"})
     assert response.status_code == 422
+
+
+def test_monitor_api_lifecycle(tmp_path: Path):
+    old_root = monitor_store.root
+    monitor_store.root = tmp_path
+    try:
+        created = client.post("/api/monitors", json={"url": "https://example.com/news", "device": "both", "interval_minutes": 120})
+        assert created.status_code == 200
+        monitor = created.json()
+        assert monitor["device"] == "both"
+        monitor_id = monitor["monitor_id"]
+        listed = client.get("/api/monitors")
+        assert listed.status_code == 200
+        assert listed.json()["count"] == 1
+        updated = client.patch(f"/api/monitors/{monitor_id}", json={"enabled": False})
+        assert updated.status_code == 200
+        assert updated.json()["enabled"] is False
+        alerts = client.get(f"/api/monitors/{monitor_id}/alerts")
+        assert alerts.status_code == 200
+        assert alerts.json()["count"] == 0
+        deleted = client.delete(f"/api/monitors/{monitor_id}")
+        assert deleted.status_code == 200
+        assert client.get(f"/api/monitors/{monitor_id}").status_code == 404
+    finally:
+        monitor_store.root = old_root
+
+
+def test_monitor_api_validates_interval_and_device(tmp_path: Path):
+    old_root = monitor_store.root
+    monitor_store.root = tmp_path
+    try:
+        assert client.post("/api/monitors", json={"url": "https://example.com", "interval_minutes": 30}).status_code == 422
+        assert client.post("/api/monitors", json={"url": "https://example.com", "device": "tablet"}).status_code == 422
+    finally:
+        monitor_store.root = old_root
 
 
 def test_artifact_path_cannot_escape_run_directory(tmp_path: Path):
