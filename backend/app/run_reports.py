@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse, Response
@@ -35,24 +35,26 @@ def _load_run(data_root: Path, run_id: str) -> CrawlResult:
         raise HTTPException(status_code=500, detail="Stored run is invalid") from exc
 
 
-def build_run_report_router(data_root: str | Path) -> APIRouter:
+def build_run_report_router(data_root: str | Path | Callable[[], str | Path]) -> APIRouter:
     router = APIRouter(prefix="/api/runs", tags=["reports"])
-    root = Path(data_root)
+
+    def current_root() -> Path:
+        return Path(data_root() if callable(data_root) else data_root)
 
     @router.get("/{run_id}/report.html", response_class=HTMLResponse)
     async def run_report_html(run_id: str) -> HTMLResponse:
-        result = _load_run(root, run_id)
+        result = _load_run(current_root(), run_id)
         return HTMLResponse(render_html_report(_observations(result), title=f"Ad Intelligence — {result.final_url}"))
 
     @router.get("/{run_id}/report.pdf")
     async def run_report_pdf(run_id: str) -> Response:
-        result = _load_run(root, run_id)
+        result = _load_run(current_root(), run_id)
         pdf = render_pdf_report(_observations(result), title=f"Ad Intelligence — {result.final_url}")
         return Response(content=pdf, media_type="application/pdf", headers={"Content-Disposition": 'inline; filename="ad-intelligence-run-report.pdf"'})
 
     @router.get("/{run_id}/intelligence")
     async def run_intelligence(run_id: str) -> dict[str, Any]:
-        result = _load_run(root, run_id)
+        result = _load_run(current_root(), run_id)
         return build_report_intelligence(_observations(result))
 
     return router
