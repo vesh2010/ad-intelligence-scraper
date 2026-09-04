@@ -25,6 +25,40 @@ def _observations(result: CrawlResult) -> list[dict[str, Any]]:
     return rows
 
 
+def generate_run_reports(result: CrawlResult, data_root: str | Path) -> dict[str, str]:
+    """Render and persist HTML, PDF, and intelligence immediately after a crawl."""
+    run_dir = Path(data_root) / result.run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    observations = _observations(result)
+    report_html = run_dir / "report.html"
+    report_pdf = run_dir / "report.pdf"
+    intelligence = run_dir / "intelligence.json"
+    report_html.write_text(
+        render_html_report(observations, title=f"Ad Intelligence — {result.final_url}"),
+        encoding="utf-8",
+    )
+    report_pdf.write_bytes(
+        render_pdf_report(observations, title=f"Ad Intelligence — {result.final_url}")
+    )
+    intelligence.write_text(
+        __import__("json").dumps(build_report_intelligence(observations), indent=2, default=str),
+        encoding="utf-8",
+    )
+    result.artifacts.update(
+        {
+            "report_html": str(report_html),
+            "report_pdf": str(report_pdf),
+            "intelligence": str(intelligence),
+        }
+    )
+    (run_dir / "result.json").write_text(result.model_dump_json(indent=2), encoding="utf-8")
+    return {
+        "report_html": str(report_html),
+        "report_pdf": str(report_pdf),
+        "intelligence": str(intelligence),
+    }
+
+
 def _load_run(data_root: Path, run_id: str) -> CrawlResult:
     path = data_root / run_id / "result.json"
     if not path.is_file():
@@ -60,4 +94,4 @@ def build_run_report_router(data_root: str | Path | Callable[[], str | Path]) ->
     return router
 
 
-__all__ = ["build_run_report_router"]
+__all__ = ["build_run_report_router", "generate_run_reports"]
