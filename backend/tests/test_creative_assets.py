@@ -63,6 +63,7 @@ async def test_audio_creative_is_saved_with_audio_metadata(tmp_path: Path, monke
 
     monkeypatch.setattr(creative_assets, "_safe_asset_url", lambda url: _async_true())
     monkeypatch.setattr(creative_assets.httpx, "AsyncClient", _AudioClient)
+    monkeypatch.setattr(creative_assets, "inspect_media", lambda path: {"available": True, "duration_seconds": 12.5, "audio_stream_count": 1, "artist": "Example Artist"})
 
     assets = await creative_assets.capture_creative_assets(
         ["https://cdn.example.test/spot.mp3"], tmp_path
@@ -71,6 +72,8 @@ async def test_audio_creative_is_saved_with_audio_metadata(tmp_path: Path, monke
     assert len(assets) == 1
     assert assets[0]["mime_type"] == "audio/mpeg"
     assert assets[0]["asset_kind"] == "audio"
+    assert assets[0]["media"]["audio_stream_count"] == 1
+    assert assets[0]["media"]["artist"] == "Example Artist"
     assert str(assets[0]["path"]).endswith(".mp3")
     assert Path(str(assets[0]["path"])).read_bytes() == b"MP3DATA!"
 
