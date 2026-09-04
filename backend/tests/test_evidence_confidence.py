@@ -16,5 +16,14 @@ def test_ocr_only_never_verifies_identity():
     assert result["score"] == 10
 
 
+def test_request_resolution_is_only_corroborating_evidence():
+    result = advertiser_evidence_confidence({
+        "request_resolution": {"matches": [{"ad_unit_path": "/1234/news"}]}
+    })
+    assert result["level"] == "low"
+    assert result["score"] == 5
+    assert result["signals"] == ["request_resolution"]
+
+
 def test_empty_record_is_unverified():
     assert advertiser_evidence_confidence({}) == {"score": 0, "level": "unverified", "signals": []}
