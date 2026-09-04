@@ -120,7 +120,8 @@ async def crawl_both(request: CrawlRequest) -> dict[str, object]:
     try:
         result = await crawl_both_devices(crawler, request)
         generated: list[dict[str, str]] = []
-        for page_result in result.get("results", []):
+        for device in ("desktop", "mobile"):
+            page_result = result.get(device)
             if isinstance(page_result, dict) and page_result.get("run_id"):
                 crawl_result = CrawlResult.model_validate(page_result)
                 generated.append({"run_id": crawl_result.run_id, **generate_run_reports(crawl_result, crawler.data_root)})
@@ -149,11 +150,12 @@ async def monitor_crawl_both(request: CrawlRequest) -> dict[str, object]:
     try:
         result = await crawl_both_devices(crawler, request)
         generated: list[dict[str, str]] = []
-        for page_result in result.get("results", []):
+        for device in ("desktop", "mobile"):
+            page_result = result.get(device)
             if isinstance(page_result, dict) and page_result.get("run_id"):
                 crawl_result = CrawlResult.model_validate(page_result)
                 generated.append({"run_id": crawl_result.run_id, **generate_run_reports(crawl_result, crawler.data_root)})
-        stored = persist_dual_crawl_result(history_store, result)
+        stored = persist_dual_crawl_result(history_store, str(request.url), result)
         return {**result, "reports": generated, "history": stored}
     except CrawlError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
