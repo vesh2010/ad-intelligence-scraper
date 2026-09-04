@@ -1,0 +1,169 @@
+{
+  "campaigns": {
+    "campaigns": [
+      {
+        "campaign_key": "campaign_90b48ea8232f5e2bb016",
+        "brand_name": null,
+        "advertiser_name": null,
+        "observations": 1,
+        "observation_share_pct": 33.33,
+        "first_seen": "2026-09-04T16:43:16Z",
+        "last_seen": "2026-09-04T16:43:16Z",
+        "placement_count": 0,
+        "placements": [],
+        "formats": [
+          "billboard_like"
+        ],
+        "networks": [],
+        "devices": {
+          "mobile": 1
+        },
+        "above_fold_observations": 1,
+        "competitor": false,
+        "competitor_label": null,
+        "competitor_evidence": []
+      },
+      {
+        "campaign_key": "campaign_98590ac2509f785e90e9",
+        "brand_name": null,
+        "advertiser_name": null,
+        "observations": 1,
+        "observation_share_pct": 33.33,
+        "first_seen": "2026-09-04T16:43:16Z",
+        "last_seen": "2026-09-04T16:43:16Z",
+        "placement_count": 1,
+        "placements": [
+          "div-gpt-ad-1567824605790-0"
+        ],
+        "formats": [
+          "billboard_like"
+        ],
+        "networks": [],
+        "devices": {
+          "mobile": 1
+        },
+        "above_fold_observations": 1,
+        "competitor": false,
+        "competitor_label": null,
+        "competitor_evidence": []
+      },
+      {
+        "campaign_key": "campaign_edfb13b9180e4368a7e4",
+        "brand_name": null,
+        "advertiser_name": null,
+        "observations": 1,
+        "observation_share_pct": 33.33,
+        "first_seen": "2026-09-04T16:43:16Z",
+        "last_seen": "2026-09-04T16:43:16Z",
+        "placement_count": 0,
+        "placements": [],
+        "formats": [
+          "billboard_like"
+        ],
+        "networks": [],
+        "devices": {
+          "mobile": 1
+        },
+        "above_fold_observations": 1,
+        "competitor": false,
+        "competitor_label": null,
+        "competitor_evidence": []
+      }
+    ],
+    "campaign_count": 3,
+    "competitors": [],
+    "competitor_ads": [],
+    "competitor_count": 0,
+    "total_observations": 3
+  },
+  "devices": {
+    "campaigns": [
+      {
+        "campaign_key": "campaign_90b48ea8232f5e2bb016",
+        "desktop_observations": 0,
+        "mobile_observations": 1,
+        "desktop_only": false,
+        "mobile_only": true,
+        "both_devices": false,
+        "desktop_placements": [],
+        "mobile_placements": [],
+        "shared_placements": []
+      },
+      {
+        "campaign_key": "campaign_98590ac2509f785e90e9",
+        "desktop_observations": 0,
+        "mobile_observations": 1,
+        "desktop_only": false,
+        "mobile_only": true,
+        "both_devices": false,
+        "desktop_placements": [],
+        "mobile_placements": [
+          "div-gpt-ad-1567824605790-0"
+        ],
+        "shared_placements": []
+      },
+      {
+        "campaign_key": "campaign_edfb13b9180e4368a7e4",
+        "desktop_observations": 0,
+        "mobile_observations": 1,
+        "desktop_only": false,
+        "mobile_only": true,
+        "both_devices": false,
+        "desktop_placements": [],
+        "mobile_placements": [],
+        "shared_placements": []
+      }
+    ],
+    "campaign_count": 3,
+    "both_device_campaigns": 0,
+    "desktop_only_campaigns": 0,
+    "mobile_only_campaigns": 3
+  },
+  "history": {
+    "changes": [],
+    "change_count": 0,
+    "new_campaigns": 0,
+    "disappeared_campaigns": 0,
+    "continued_campaigns": 0,
+    "creative_changes": 0,
+    "creative_added": 0,
+    "creative_removed": 0,
+    "placement_changes": 0,
+    "device_targeting_changes": 0,
+    "network_changes": 0,
+    "cpm_changes": 0,
+    "snapshot_count": 1,
+    "observed_at": [
+      "2026-09-04T16:43:16Z"
+    ]
+  },
+  "advertiser_confidence": [
+    {
+      "campaign_key": "campaign_90b48ea8232f5e2bb016",
+      "level": "unverified",
+      "score": 0,
+      "signals": [],
+      "observation_count": 1
+    },
+    {
+      "campaign_key": "campaign_98590ac2509f785e90e9",
+      "level": "unverified",
+      "score": 0,
+      "signals": [],
+      "observation_count": 1
+    },
+    {
+      "campaign_key": "campaign_edfb13b9180e4368a7e4",
+      "level": "unverified",
+      "score": 0,
+      "signals": [],
+      "observation_count": 1
+    }
+  ],
+  "ad_request_resolution": {
+    "resolved_slots": [],
+    "resolved_slot_count": 0,
+    "request_count": 0
+  },
+  "observation_count": 3
+}
