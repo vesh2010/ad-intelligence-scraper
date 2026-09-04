@@ -7,8 +7,8 @@
         "advertiser_name": null,
         "observations": 1,
         "observation_share_pct": 33.33,
-        "first_seen": "2026-09-04T16:43:16Z",
-        "last_seen": "2026-09-04T16:43:16Z",
+        "first_seen": "2026-09-04T16:48:40Z",
+        "last_seen": "2026-09-04T16:48:40Z",
         "placement_count": 0,
         "placements": [],
         "formats": [
@@ -16,7 +16,7 @@
         ],
         "networks": [],
         "devices": {
-          "mobile": 1
+          "desktop": 1
         },
         "above_fold_observations": 1,
         "competitor": false,
@@ -29,8 +29,8 @@
         "advertiser_name": null,
         "observations": 1,
         "observation_share_pct": 33.33,
-        "first_seen": "2026-09-04T16:43:16Z",
-        "last_seen": "2026-09-04T16:43:16Z",
+        "first_seen": "2026-09-04T16:48:40Z",
+        "last_seen": "2026-09-04T16:48:40Z",
         "placement_count": 1,
         "placements": [
           "div-gpt-ad-1567824605790-0"
@@ -40,7 +40,7 @@
         ],
         "networks": [],
         "devices": {
-          "mobile": 1
+          "desktop": 1
         },
         "above_fold_observations": 1,
         "competitor": false,
@@ -53,8 +53,8 @@
         "advertiser_name": null,
         "observations": 1,
         "observation_share_pct": 33.33,
-        "first_seen": "2026-09-04T16:43:16Z",
-        "last_seen": "2026-09-04T16:43:16Z",
+        "first_seen": "2026-09-04T16:48:40Z",
+        "last_seen": "2026-09-04T16:48:40Z",
         "placement_count": 0,
         "placements": [],
         "formats": [
@@ -62,7 +62,7 @@
         ],
         "networks": [],
         "devices": {
-          "mobile": 1
+          "desktop": 1
         },
         "above_fold_observations": 1,
         "competitor": false,
@@ -80,10 +80,10 @@
     "campaigns": [
       {
         "campaign_key": "campaign_90b48ea8232f5e2bb016",
-        "desktop_observations": 0,
-        "mobile_observations": 1,
-        "desktop_only": false,
-        "mobile_only": true,
+        "desktop_observations": 1,
+        "mobile_observations": 0,
+        "desktop_only": true,
+        "mobile_only": false,
         "both_devices": false,
         "desktop_placements": [],
         "mobile_placements": [],
@@ -91,23 +91,23 @@
       },
       {
         "campaign_key": "campaign_98590ac2509f785e90e9",
-        "desktop_observations": 0,
-        "mobile_observations": 1,
-        "desktop_only": false,
-        "mobile_only": true,
+        "desktop_observations": 1,
+        "mobile_observations": 0,
+        "desktop_only": true,
+        "mobile_only": false,
         "both_devices": false,
-        "desktop_placements": [],
-        "mobile_placements": [
+        "desktop_placements": [
           "div-gpt-ad-1567824605790-0"
         ],
+        "mobile_placements": [],
         "shared_placements": []
       },
       {
         "campaign_key": "campaign_edfb13b9180e4368a7e4",
-        "desktop_observations": 0,
-        "mobile_observations": 1,
-        "desktop_only": false,
-        "mobile_only": true,
+        "desktop_observations": 1,
+        "mobile_observations": 0,
+        "desktop_only": true,
+        "mobile_only": false,
         "both_devices": false,
         "desktop_placements": [],
         "mobile_placements": [],
@@ -116,8 +116,8 @@
     ],
     "campaign_count": 3,
     "both_device_campaigns": 0,
-    "desktop_only_campaigns": 0,
-    "mobile_only_campaigns": 3
+    "desktop_only_campaigns": 3,
+    "mobile_only_campaigns": 0
   },
   "history": {
     "changes": [],
@@ -134,7 +134,7 @@
     "cpm_changes": 0,
     "snapshot_count": 1,
     "observed_at": [
-      "2026-09-04T16:43:16Z"
+      "2026-09-04T16:48:40Z"
     ]
   },
   "advertiser_confidence": [
