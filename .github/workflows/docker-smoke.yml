@@ -1,0 +1,35 @@
+name: docker-smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build --pull -t ad-intelligence-scraper:ci .
+      - name: Start container
+        run: docker run -d --name ad-intelligence-scraper-ci -p 18000:8000 ad-intelligence-scraper:ci
+      - name: Wait for health endpoint
+        run: |
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18000/api/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs ad-intelligence-scraper-ci
+          exit 1
+      - name: Verify API docs
+        run: curl --fail --silent http://127.0.0.1:18000/docs >/dev/null
+      - name: Container diagnostics
+        if: always()
+        run: docker logs ad-intelligence-scraper-ci
+      - name: Cleanup
+        if: always()
+        run: docker rm -f ad-intelligence-scraper-ci || true
