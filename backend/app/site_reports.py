@@ -13,22 +13,10 @@ from .report_pdf import render_pdf_report
 
 
 def _campaign_key(record: dict[str, Any]) -> str:
-    """Create the same kind of stable observable identity used by persisted snapshots."""
-    values = [
-        record.get("brand_name"),
-        record.get("advertiser_name"),
-        record.get("product_name"),
-        record.get("landing_page_url"),
-        *(record.get("destination_urls") or []),
-    ]
+    values = [record.get("brand_name"), record.get("advertiser_name"), record.get("product_name"), record.get("landing_page_url"), *(record.get("destination_urls") or [])]
     normalized = [str(value).strip().lower().rstrip("/") for value in values if value]
     if not normalized:
-        normalized = [
-            str(record.get("ad_type") or ""),
-            str(record.get("ad_format") or ""),
-            str(record.get("ad_unit_code") or ""),
-            str(record.get("element_id") or ""),
-        ]
+        normalized = [str(record.get(k) or "") for k in ("ad_type", "ad_format", "ad_unit_code", "element_id")]
     raw = "|".join(value for value in normalized if value)
     return "campaign_" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:20] if raw else ""
 
@@ -38,6 +26,43 @@ def _publisher_domain(root_url: Any) -> str:
         return (urlparse(str(root_url or "")).hostname or "").lower().removeprefix("www.")
     except ValueError:
         return ""
+
+
+def _visual_index(page: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    result: dict[str, dict[str, Any]] = {}
+    for item in page.get("visual_evidence", []) or []:
+        if not isinstance(item, dict):
+            continue
+        for key in (item.get("id"), item.get("selector")):
+            if key:
+                result[str(key)] = item
+    return result
+
+
+def _merge_visual_evidence(record: dict[str, Any], evidence: dict[str, Any] | None) -> dict[str, Any]:
+    if not evidence:
+        return record
+    row = dict(record)
+    row["visual_evidence"] = evidence
+    if evidence.get("screenshot"):
+        row.setdefault("screenshot", evidence["screenshot"])
+    ocr = evidence.get("ocr")
+    if isinstance(ocr, dict) and ocr.get("text"):
+        row.setdefault("ocr_text", ocr["text"])
+        row.setdefault("creative_text", ocr["text"])
+    visual = evidence.get("visual_classification")
+    if isinstance(visual, dict):
+        row.setdefault("visual_classification", visual)
+        row.setdefault("call_to_action", visual.get("cta_phrases") or [])
+    for key, field in (("image_urls", "creative_image_urls"), ("video_urls", "creative_video_urls"), ("audio_urls", "creative_audio_urls")):
+        values = evidence.get(key) or []
+        if values:
+            row[field] = list(dict.fromkeys([*(row.get(field) or []), *values]))
+    if evidence.get("creative_assets"):
+        row["creative_assets"] = evidence["creative_assets"]
+    if evidence.get("iframe_src"):
+        row["destination_urls"] = list(dict.fromkeys([*(row.get("destination_urls") or []), evidence["iframe_src"]]))
+    return row
 
 
 def _observations(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -52,8 +77,11 @@ def _observations(payload: dict[str, Any]) -> list[dict[str, Any]]:
         records = page.get("ad_records", [])
         if not isinstance(records, list) or not all(isinstance(record, dict) for record in records):
             raise HTTPException(status_code=422, detail="page ad_records must be a list of objects")
+        visuals = _visual_index(page)
         for record in records:
-            row = dict(record)
+            placement = record.get("placement") if isinstance(record.get("placement"), dict) else {}
+            visual = visuals.get(str(record.get("element_id") or "")) or visuals.get(str(placement.get("selector") or ""))
+            row = _merge_visual_evidence(dict(record), visual)
             row.setdefault("device", page.get("device", "desktop"))
             row.setdefault("target_url", page.get("final_url") or page.get("url"))
             row.setdefault("run_id", page.get("run_id"))
