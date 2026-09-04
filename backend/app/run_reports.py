@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -41,7 +42,7 @@ def generate_run_reports(result: CrawlResult, data_root: str | Path) -> dict[str
         render_pdf_report(observations, title=f"Ad Intelligence — {result.final_url}")
     )
     intelligence.write_text(
-        __import__("json").dumps(build_report_intelligence(observations), indent=2, default=str),
+        json.dumps(build_report_intelligence(observations), indent=2, default=str),
         encoding="utf-8",
     )
     result.artifacts.update(
