@@ -12,22 +12,18 @@ def _payload() -> dict:
         "root_url": "https://example.com",
         "pages_crawled": 1,
         "pages_failed": 0,
-        "pages": [
-            {
-                "run_id": "a" * 32,
-                "final_url": "https://example.com/news",
-                "device": "desktop",
-                "ad_records": [
-                    {
-                        "ad_type": "gpt",
-                        "advertiser_name": "Acme Advertiser",
-                        "brand_name": "Acme",
-                        "landing_page_url": "https://acme.example/",
-                        "evidence": ["gpt.advertiser_name"],
-                    }
-                ],
-            }
-        ],
+        "pages": [{
+            "run_id": "a" * 32,
+            "final_url": "https://example.com/news",
+            "device": "desktop",
+            "ad_records": [{
+                "ad_type": "gpt",
+                "advertiser_name": "Acme Advertiser",
+                "brand_name": "Acme",
+                "landing_page_url": "https://acme.example/",
+                "evidence": ["gpt.advertiser_name"],
+            }],
+        }],
     }
 
 
@@ -39,7 +35,8 @@ def test_site_report_endpoints():
 
     html = client.post("/api/site-crawl/report.html", json=payload)
     assert html.status_code == 200
-    assert "Competitor / brand frequency" in html.text
+    assert "Competitor advertising analysis" in html.text
+    assert "Competitor ads" in html.text
     assert "Acme Advertiser" in html.text
     assert "Acme" in html.text
 
