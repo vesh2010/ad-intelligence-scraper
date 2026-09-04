@@ -1,5 +1,4 @@
 from pathlib import Path
-import os
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,5 +36,5 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    console=True,
+    console=False,
 )
