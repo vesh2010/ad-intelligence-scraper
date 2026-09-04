@@ -33,19 +33,23 @@ async def execute_monitor(
         device="desktop",
     )
     previous = history_store.load(url)
+    # A URL may have multiple monitors. Only compare against observations owned
+    # by this monitor; legacy rows without monitor_id remain usable only when
+    # there is no monitor-scoped history yet.
+    scoped_previous = [row for row in previous if row.get("monitor_id") == monitor_id]
 
     if device == "both":
         crawl_result = await crawl_both_devices(crawler, request)
-        stored = persist_dual_crawl_result(history_store, url, crawl_result)
+        stored = persist_dual_crawl_result(history_store, url, crawl_result, monitor_id=monitor_id)
     else:
         request = request.model_copy(update={"device": device})
         crawl_result = await crawler.crawl(request)
-        stored = persist_crawl_result(history_store, url, crawl_result)
+        stored = persist_crawl_result(history_store, url, crawl_result, monitor_id=monitor_id)
 
     current_session_id = stored["crawl_session_id"]
     current = [row for row in history_store.load(url) if row.get("crawl_session_id") == current_session_id]
     current_session_ids = {str(row.get("crawl_session_id")) for row in current}
-    prior = [row for row in previous if str(row.get("crawl_session_id")) not in current_session_ids]
+    prior = [row for row in scoped_previous if str(row.get("crawl_session_id")) not in current_session_ids]
     if prior:
         prior_timestamp = max(str(row.get("observed_at") or "") for row in prior)
         prior = [row for row in prior if str(row.get("observed_at") or "") == prior_timestamp]
