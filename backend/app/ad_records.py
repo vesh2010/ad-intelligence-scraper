@@ -37,4 +37,5 @@ class AdRecord(BaseModel):
     placement: dict[str, object] | None = None
     above_fold: bool | None = None
     evidence: list[str] = Field(default_factory=list)
+    request_resolution: dict[str, Any] | None = None
     confidence: float = 0.0
