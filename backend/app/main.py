@@ -23,7 +23,7 @@ from .monitoring_routes import build_monitor_router
 from .report_html import render_html_report
 from .report_intelligence import build_report_intelligence
 from .report_pdf import render_pdf_report
-from .run_reports import build_run_report_router
+from .run_reports import build_run_report_router, generate_run_reports
 from .site_crawl import crawl_site
 from .site_reports import build_site_report_router
 
@@ -106,7 +106,9 @@ async def health() -> dict[str, str]:
 @app.post("/api/crawl", response_model=CrawlResult)
 async def crawl(request: CrawlRequest) -> CrawlResult:
     try:
-        return await crawler.crawl(request)
+        result = await crawler.crawl(request)
+        generate_run_reports(result, crawler.data_root)
+        return result
     except CrawlError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
@@ -116,7 +118,13 @@ async def crawl(request: CrawlRequest) -> CrawlResult:
 @app.post("/api/crawl/both-devices")
 async def crawl_both(request: CrawlRequest) -> dict[str, object]:
     try:
-        return await crawl_both_devices(crawler, request)
+        result = await crawl_both_devices(crawler, request)
+        generated: list[dict[str, str]] = []
+        for page_result in result.get("results", []):
+            if isinstance(page_result, dict) and page_result.get("run_id"):
+                crawl_result = CrawlResult.model_validate(page_result)
+                generated.append({"run_id": crawl_result.run_id, **generate_run_reports(crawl_result, crawler.data_root)})
+        return {**result, "reports": generated}
     except CrawlError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
@@ -127,6 +135,7 @@ async def crawl_both(request: CrawlRequest) -> dict[str, object]:
 async def monitor_crawl(request: CrawlRequest) -> dict[str, object]:
     try:
         result = await crawler.crawl(request)
+        generate_run_reports(result, crawler.data_root)
         stored = persist_crawl_result(history_store, str(request.url), result)
         return {"crawl": result.model_dump(), "history": stored}
     except CrawlError as exc:
@@ -139,8 +148,13 @@ async def monitor_crawl(request: CrawlRequest) -> dict[str, object]:
 async def monitor_crawl_both(request: CrawlRequest) -> dict[str, object]:
     try:
         result = await crawl_both_devices(crawler, request)
-        stored = persist_dual_crawl_result(history_store, str(request.url), result)
-        return {**result, "history": stored}
+        generated: list[dict[str, str]] = []
+        for page_result in result.get("results", []):
+            if isinstance(page_result, dict) and page_result.get("run_id"):
+                crawl_result = CrawlResult.model_validate(page_result)
+                generated.append({"run_id": crawl_result.run_id, **generate_run_reports(crawl_result, crawler.data_root)})
+        stored = persist_dual_crawl_result(history_store, result)
+        return {**result, "reports": generated, "history": stored}
     except CrawlError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
