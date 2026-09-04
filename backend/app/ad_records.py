@@ -8,7 +8,7 @@ from .bid_models import BidEvidence
 
 
 class AdRecord(BaseModel):
-    """One observable ad/slot record, with auction bids retained as evidence."""
+    """One observable ad/slot record, including visual and creative evidence."""
 
     ad_id: str
     ad_type: str
@@ -17,6 +17,11 @@ class AdRecord(BaseModel):
     advertiser_id: str | None = None
     brand_name: str | None = None
     product_name: str | None = None
+    headline: str | None = None
+    call_to_action: list[str] = Field(default_factory=list)
+    ocr_text: str | None = None
+    visual_classification: dict[str, Any] | None = None
+    screenshot: str | None = None
     ad_unit_code: str | None = None
     ad_unit_path: str | None = None
     element_id: str | None = None
@@ -31,6 +36,8 @@ class AdRecord(BaseModel):
     destination_urls: list[str] = Field(default_factory=list)
     creative_image_urls: list[str] = Field(default_factory=list)
     creative_video_urls: list[str] = Field(default_factory=list)
+    creative_audio_urls: list[str] = Field(default_factory=list)
+    creative_assets: list[dict[str, Any]] = Field(default_factory=list)
     landing_page: dict[str, Any] | None = None
     bids: list[BidEvidence] = Field(default_factory=list)
     winning_bid: BidEvidence | None = None
