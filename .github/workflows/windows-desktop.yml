@@ -79,8 +79,9 @@ jobs:
           The application starts its local backend and opens the dashboard in your browser.
           No Docker, Python, Node.js, Playwright, Chromium or other runtime installation is required.
 
-          Keep the console window open while using the application. Closing it stops the local server.
-          Data and crawl history are stored in a data folder next to the executable.
+          The application runs locally in the background while you use the browser dashboard.
+          Its data is stored in a data folder next to the executable.
+          To stop it, end AdIntelligenceScraper.exe from Windows Task Manager.
           '@ | Set-Content release\README.txt
 
       - name: Upload Windows portable artifact
