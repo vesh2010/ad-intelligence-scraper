@@ -35,7 +35,7 @@ What happens:
 3. the user operates the normal web UI;
 4. crawl data is stored in a `data` folder next to the EXE;
 5. the monitoring scheduler runs while the EXE remains open;
-6. closing the console window stops the local backend.
+6. the background application can be stopped from Windows Task Manager when finished.
 
 The EXE is intentionally localhost-only; it does not publish the scraper API to the LAN or internet.
 
