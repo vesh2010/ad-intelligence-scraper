@@ -59,11 +59,10 @@ class MonitorStore:
         return [x for x in rows if x.get("monitor_id") == monitor_id] if monitor_id else rows
 
     def append_alerts(self, alerts: list[dict[str, Any]]) -> None:
-        if not alerts:
-            return
-        rows = self.alerts()
-        rows.extend(dict(x) for x in alerts)
-        self._save(self.alerts_path, rows)
+        if alerts:
+            rows = self.alerts()
+            rows.extend(dict(x) for x in alerts)
+            self._save(self.alerts_path, rows)
 
 
 def utc_timestamp() -> str:
@@ -78,46 +77,24 @@ def create_monitor_target(*, url: str, device: str = "desktop", enabled: bool = 
     if interval_minutes < 60:
         raise ValueError("interval_minutes must be at least 60")
     now = utc_timestamp()
-    return {
-        "monitor_id": uuid4().hex,
-        "target": str(url).strip(),
-        "target_key": target_key(url),
-        "device": device,
-        "enabled": bool(enabled),
-        "interval_minutes": int(interval_minutes),
-        "crawl_options": dict(options),
-        "created_at": now,
-        "updated_at": now,
-    }
-
-
-def _session_groups(observations: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
-    grouped: dict[str, list[dict[str, Any]]] = {}
-    for row in observations:
-        session = str(row.get("crawl_session_id") or row.get("observed_at") or "")
-        if session:
-            grouped.setdefault(session, []).append(row)
-    return sorted(grouped.values(), key=lambda rows: min(str(x.get("observed_at") or "") for x in rows))
+    return {"monitor_id": uuid4().hex, "target": str(url).strip(), "target_key": target_key(url), "device": device,
+            "enabled": bool(enabled), "interval_minutes": int(interval_minutes), "crawl_options": dict(options),
+            "created_at": now, "updated_at": now}
 
 
 def build_alerts(*, monitor_id: str, target: str, previous: list[dict[str, Any]], current: list[dict[str, Any]], observed_at: str | None = None) -> list[dict[str, Any]]:
-    """Turn evidence-backed changes into deterministic, deduplicated alerts."""
-    changes = detect_changes(previous, current)
+    """Turn evidence-backed changes into alert records; continued/no-op campaigns are omitted."""
+    changes = detect_changes(previous, current)["changes"]
     timestamp = observed_at or utc_timestamp()
     alerts: list[dict[str, Any]] = []
     for change in changes:
-        change_type = str(change.get("change_type") or change.get("type") or "change")
+        change_type = str(change.get("change") or "change")
+        if change_type == "continued":
+            continue
         severity = "high" if change_type in {"new_campaign", "campaign_disappeared", "device_targeting_changed"} else "medium"
-        alerts.append({
-            "alert_id": uuid4().hex,
-            "monitor_id": monitor_id,
-            "target": target,
-            "observed_at": timestamp,
-            "severity": severity,
-            "change_type": change_type,
-            "campaign_key": change.get("campaign_key") or change.get("ad_id"),
-            "details": change,
-        })
+        alerts.append({"alert_id": uuid4().hex, "monitor_id": monitor_id, "target": target, "observed_at": timestamp,
+                       "severity": severity, "change_type": change_type,
+                       "campaign_key": change.get("campaign_key") or change.get("ad_id"), "details": change})
     return alerts
 
 
@@ -132,12 +109,4 @@ def dedupe_alerts(existing: list[dict[str, Any]], candidates: list[dict[str, Any
     return result
 
 
-def compare_monitor_sessions(observations: list[dict[str, Any]]) -> dict[str, Any]:
-    sessions = _session_groups(observations)
-    if len(sessions) < 2:
-        return {"previous_session": None, "current_session": sessions[-1] if sessions else [], "alerts": []}
-    previous, current = sessions[-2], sessions[-1]
-    return {"previous_session": previous, "current_session": current, "alerts": []}
-
-
-__all__ = ["MonitorStore", "create_monitor_target", "build_alerts", "dedupe_alerts", "compare_monitor_sessions", "utc_timestamp"]
+__all__ = ["MonitorStore", "create_monitor_target", "build_alerts", "dedupe_alerts", "utc_timestamp"]
