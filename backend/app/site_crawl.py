@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .crawler.crawler import SiteCrawler
 from .crawler.models import CrawlRequest, CrawlResult
 from .url_discovery import URLQueue, classify_page, discover_sitemaps, extract_discovery_urls, infer_section
+
+
+def extract_page_hrefs(html: str) -> list[str]:
+    """Backward-compatible anchor extractor used by existing integrations/tests."""
+    return re.findall(r"<a\b[^>]*\bhref=[\"']([^\"']+)[\"']", html, flags=re.I)
 
 
 async def crawl_site(
@@ -71,10 +77,11 @@ async def crawl_site(
             result.page_type = classify_page(result.final_url, result.title)
             result.discovery_method = str(entry.get("discovery_method") or "page_link")
             result_path = result.artifacts.get("html")
+            failed_status = bool(result.status and result.status >= 400)
             entry.update({
-                "status": "success" if not (result.status and result.status >= 400) else "failed",
+                "status": "failed" if failed_status else "success",
                 "http_status": result.status,
-                "last_error": None if not (result.status and result.status >= 400) else f"HTTP {result.status}",
+                "last_error": f"HTTP {result.status}" if failed_status else None,
                 "depth": depth,
                 "section": result.section,
                 "page_type": result.page_type,
@@ -85,12 +92,12 @@ async def crawl_site(
                 "run_id": result.run_id,
             })
             pages.append(result)
-            if result_path and depth < max_depth:
+            if failed_status:
+                failures.append({"url": url, "error": f"HTTP {result.status}", "depth": str(depth), "status": "failed"})
+            elif result_path and depth < max_depth:
                 try:
                     html = open(result_path, "r", encoding="utf-8").read()
                     discovered = extract_discovery_urls(result.final_url, html, queue.root_url, allow_subdomains)
-                    # The queue records links, while canonical/JSON-LD/iframe URLs are
-                    # all represented in the same bounded manifest so coverage is auditable.
                     queue.add_links(result.final_url, discovered, depth)
                 except OSError as exc:
                     entry["last_error"] = f"cannot read saved HTML: {exc}"
@@ -99,10 +106,14 @@ async def crawl_site(
             failures.append({"url": url, "error": str(exc), "depth": str(depth), "status": "failed"})
 
     manifest = list(queue.manifest.values())
+    crawled_urls = {page.requested_url for page in pages}
+    failed_urls = {failure["url"] for failure in failures}
     for item in manifest:
-        if item.get("url") in {page.requested_url for page in pages}:
+        if item.get("url") in failed_urls:
+            item["status"] = "failed"
+        elif item.get("url") in crawled_urls:
             continue
-        if item.get("status") == "discovered" and item.get("url") not in {f["url"] for f in failures}:
+        elif item.get("status") == "discovered":
             item["status"] = "queued_unvisited"
     return {
         "root_url": queue.root_url,
