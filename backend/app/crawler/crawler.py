@@ -26,6 +26,13 @@ class CrawlError(RuntimeError):
     pass
 
 
+CONSENT_SELECTORS = (
+    "button:has-text('Accept all')", "button:has-text('Accept')", "button:has-text('Allow all')",
+    "button:has-text('Allow')", "button:has-text('I agree')", "button:has-text('Continue')",
+    "[role='button']:has-text('Accept all')", "[role='button']:has-text('Accept')",
+)
+
+
 class SiteCrawler:
     def __init__(self, data_root: str | Path = "data/runs") -> None:
         self.data_root = Path(data_root)
@@ -58,6 +65,10 @@ class SiteCrawler:
         final_url = str(request.url)
         status: int | None = None
         ads_txt: dict[str, object] | None = None
+        consent_detected = False
+        consent_clicked = False
+        consent_selector: str | None = None
+        consent_error: str | None = None
         if request.include_ads_txt:
             try:
                 ads_txt = await fetch_ads_txt(str(request.url))
@@ -69,7 +80,13 @@ class SiteCrawler:
                 browser = await p.chromium.launch(headless=True)
             except Exception as exc:
                 raise CrawlError("Chromium could not be launched. Install it with `python -m playwright install chromium`.") from exc
-            context = await browser.new_context(viewport={"width": profile.viewport_width, "height": profile.viewport_height}, device_scale_factor=profile.device_scale_factor, is_mobile=profile.is_mobile, has_touch=profile.has_touch, service_workers="block")
+            context = await browser.new_context(
+                viewport={"width": profile.viewport_width, "height": profile.viewport_height},
+                device_scale_factor=profile.device_scale_factor,
+                is_mobile=profile.is_mobile,
+                has_touch=profile.has_touch,
+                service_workers="block",
+            )
             page = await context.new_page()
             if request.trace:
                 await context.tracing.start(screenshots=True, snapshots=True, sources=True)
@@ -109,40 +126,60 @@ class SiteCrawler:
                 except Exception as exc:
                     raise CrawlError(f"Navigation failed for {request.url}: {exc}") from exc
                 status = response.status if response else None
-                await page.wait_for_timeout(request.wait_ms)
 
                 async def snapshot(stage: str) -> None:
                     nonlocal ad_detection, network, dom_candidates
                     dom_candidates = await collect_frame_dom_candidates(page)
                     network = list(network_by_request.values())
                     ad_detection = self._merge_detection(ad_detection, detect_ads(network, dom_candidates))
-                    runtime_snapshots.append({"stage": stage, "captured_at_ms": round((time.perf_counter() - started) * 1000), "data": await collect_runtime_ads(page)})
+                    if request.capture_runtime_snapshots:
+                        runtime_snapshots.append({"stage": stage, "captured_at_ms": round((time.perf_counter() - started) * 1000), "data": await collect_runtime_ads(page)})
 
-                await snapshot("post_load")
-                # Visit several viewport positions so lazy-loaded ads, sticky units and
-                # below-the-fold creatives get a chance to render before evidence capture.
-                scroll_state = await page.evaluate("() => ({height: document.documentElement.scrollHeight, viewport: window.innerHeight})")
-                page_height = max(int(scroll_state.get("height", 0)), 1)
-                viewport_height = max(int(scroll_state.get("viewport", profile.viewport_height)), 1)
-                positions = list(range(0, page_height, max(viewport_height // 2, 300)))
-                if page_height > viewport_height:
-                    positions.append(page_height - viewport_height)
-                seen_positions: set[int] = set()
-                for position in positions[:60]:
-                    position = max(0, min(position, page_height - viewport_height if page_height > viewport_height else 0))
-                    if position in seen_positions:
-                        continue
-                    seen_positions.add(position)
-                    await page.evaluate("y => window.scrollTo(0, y)", position)
-                    await page.wait_for_timeout(min(request.wait_ms, 1200))
-                    await snapshot(f"scroll_{position}")
-                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                await page.wait_for_timeout(min(request.wait_ms, 1500))
+                await snapshot("dom_content_loaded")
+                await page.wait_for_timeout(request.wait_ms)
+                await snapshot("post_wait")
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=min(request.timeout_ms, 10000))
+                except Exception:
+                    pass
+                await snapshot("network_idle_or_timeout")
+
+                if request.handle_consent:
+                    for selector in CONSENT_SELECTORS:
+                        try:
+                            locator = page.locator(selector).first
+                            if await locator.count() and await locator.is_visible():
+                                consent_detected = True
+                                consent_selector = selector
+                                await locator.click(timeout=3000)
+                                consent_clicked = True
+                                await page.wait_for_timeout(min(request.wait_ms, 1500))
+                                await snapshot("post_consent")
+                                break
+                        except Exception as exc:
+                            consent_error = str(exc)
+
+                if request.scroll_page:
+                    scroll_state = await page.evaluate("() => ({height: document.documentElement.scrollHeight, viewport: window.innerHeight})")
+                    page_height = max(int(scroll_state.get("height", 0)), 1)
+                    viewport_height = max(int(scroll_state.get("viewport", profile.viewport_height)), 1)
+                    checkpoints = [0, 0.25, 0.5, 0.75, 1.0]
+                    positions = [0 if ratio == 0 else max(0, page_height - viewport_height if ratio == 1 else round((page_height - viewport_height) * ratio)) for ratio in checkpoints]
+                    seen_positions: set[int] = set()
+                    for ratio, position in zip(checkpoints, positions):
+                        if position in seen_positions:
+                            continue
+                        seen_positions.add(position)
+                        await page.evaluate("y => window.scrollTo(0, y)", position)
+                        await page.wait_for_timeout(min(request.wait_ms, 1200))
+                        await snapshot(f"scroll_{int(ratio * 100)}pct")
+                    await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                    await page.wait_for_timeout(min(request.wait_ms, 1500))
+                    await snapshot("final_scroll")
+
                 dom_candidates_after_scroll = await collect_frame_dom_candidates(page)
                 network = list(network_by_request.values())
                 ad_detection = self._merge_detection(ad_detection, detect_ads(network, dom_candidates_after_scroll))
-                runtime_snapshots.append({"stage": "post_scroll", "captured_at_ms": round((time.perf_counter() - started) * 1000), "data": await collect_runtime_ads(page)})
-
                 visual_evidence = await capture_dom_ad_evidence(page, dom_candidates_after_scroll, run_dir)
                 network = list(network_by_request.values())
                 request_resolution = resolve_ad_requests(network)
@@ -170,7 +207,8 @@ class SiteCrawler:
                 html = await page.content()
                 network = list(network_by_request.values())
                 (run_dir / "page.html").write_text(html, encoding="utf-8")
-                await page.screenshot(path=str(run_dir / "screenshot.png"), full_page=True)
+                if request.keep_evidence:
+                    await page.screenshot(path=str(run_dir / "screenshot.png"), full_page=True)
                 (run_dir / "network.json").write_text(json.dumps(network, indent=2), encoding="utf-8")
                 (run_dir / "ads.json").write_text(json.dumps(ad_detection.model_dump(), indent=2), encoding="utf-8")
                 (run_dir / "runtime_ads.json").write_text(json.dumps(runtime_snapshots, indent=2), encoding="utf-8")
@@ -179,8 +217,9 @@ class SiteCrawler:
                     (run_dir / "landing_enrichment.json").write_text(json.dumps(landing_enrichment, indent=2), encoding="utf-8")
                 if ads_txt is not None:
                     (run_dir / "ads.txt.json").write_text(json.dumps(ads_txt, indent=2), encoding="utf-8")
+                (run_dir / "capture_stages.json").write_text(json.dumps({"stages": [item.get("stage") for item in runtime_snapshots], "consent_detected": consent_detected, "consent_clicked": consent_clicked}, indent=2), encoding="utf-8")
                 title = await page.title()
-                metadata = await page.evaluate("""() => ({description: document.querySelector('meta[name="description"]')?.content ?? null, canonical: document.querySelector('link[rel="canonical"]')?.href ?? null, lang: document.documentElement.lang || null})""")
+                metadata = await page.evaluate("""() => ({description: document.querySelector('meta[name=\"description\"]')?.content ?? null, canonical: document.querySelector('link[rel=\"canonical\"]')?.href ?? null, lang: document.documentElement.lang || null})""")
                 counts = await page.evaluate("""() => ({images: document.images.length, scripts: document.scripts.length, links: document.links.length, iframes: document.querySelectorAll('iframe').length})""")
                 dimensions = await page.evaluate("""() => ({viewport_width: window.innerWidth, viewport_height: window.innerHeight, document_width: document.documentElement.scrollWidth, document_height: document.documentElement.scrollHeight})""")
                 frames = [frame.url for frame in page.frames]
@@ -196,12 +235,22 @@ class SiteCrawler:
                 await browser.close()
 
         elapsed_ms = round((time.perf_counter() - started) * 1000)
-        artifacts = {"html": str(run_dir / "page.html"), "screenshot": str(run_dir / "screenshot.png"), "network": str(run_dir / "network.json"), "ads": str(run_dir / "ads.json"), "runtime_ads": str(run_dir / "runtime_ads.json"), "visual_evidence": str(run_dir / "visual_evidence.json"), "ad_records": str(run_dir / "ad_records.json")}
+        artifacts = {"html": str(run_dir / "page.html"), "network": str(run_dir / "network.json"), "ads": str(run_dir / "ads.json"), "runtime_ads": str(run_dir / "runtime_ads.json"), "visual_evidence": str(run_dir / "visual_evidence.json"), "ad_records": str(run_dir / "ad_records.json"), "capture_stages": str(run_dir / "capture_stages.json")}
+        if request.keep_evidence and (run_dir / "screenshot.png").is_file():
+            artifacts["screenshot"] = str(run_dir / "screenshot.png")
         if (run_dir / "ad_request_resolution.json").is_file(): artifacts["ad_request_resolution"] = str(run_dir / "ad_request_resolution.json")
         if request.enrich_landing_pages: artifacts["landing_enrichment"] = str(run_dir / "landing_enrichment.json")
         if ads_txt is not None: artifacts["ads_txt"] = str(run_dir / "ads.txt.json")
         if request.trace: artifacts["trace"] = str(run_dir / "trace.zip")
-        result = CrawlResult(run_id=run_id, requested_url=str(request.url), final_url=final_url, status=status, title=title, elapsed_ms=elapsed_ms, dimensions=dimensions, counts=counts, metadata=metadata, redirects=redirects, network=network, console_errors=console_errors, page_errors=page_errors, frames=frames, artifacts=artifacts, ad_detection=ad_detection, runtime_ads={"snapshots": runtime_snapshots}, visual_evidence=visual_evidence, ad_records=ad_records, ads_txt=ads_txt, device=request.device)
+        result = CrawlResult(
+            run_id=run_id, requested_url=str(request.url), final_url=final_url, status=status, title=title,
+            elapsed_ms=elapsed_ms, dimensions=dimensions, counts=counts, metadata=metadata, redirects=redirects,
+            network=network, console_errors=console_errors, page_errors=page_errors, frames=frames, artifacts=artifacts,
+            ad_detection=ad_detection, runtime_ads={"snapshots": runtime_snapshots}, visual_evidence=visual_evidence,
+            ad_records=ad_records, ads_txt=ads_txt, device=request.device,
+            consent_detected=consent_detected, consent_clicked=consent_clicked,
+            consent_selector=consent_selector, consent_error=consent_error,
+        )
         (run_dir / "result.json").write_text(json.dumps(result.model_dump(), indent=2), encoding="utf-8")
         return result
 
@@ -215,4 +264,9 @@ class SiteCrawler:
                 continue
             seen.add(key)
             signals.append(signal)
-        return AdDetectionResult(signals=signals, technologies=sorted({s.ad_technology for s in signals if s.ad_technology}), network_signal_count=sum(1 for s in signals if s.signal_type == "network"), dom_signal_count=sum(1 for s in signals if s.signal_type == "dom"))
+        return AdDetectionResult(
+            signals=signals,
+            technologies=sorted({s.ad_technology for s in signals if s.ad_technology}),
+            network_signal_count=sum(1 for s in signals if s.signal_type == "network"),
+            dom_signal_count=sum(1 for s in signals if s.signal_type == "dom"),
+        )
