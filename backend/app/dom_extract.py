@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 DOM_SCRIPT = """
 () => {
   const selectorFor = (el) => {
@@ -25,55 +26,71 @@ DOM_SCRIPT = """
     return parts.join(' > ');
   };
 
-  return Array.from(document.querySelectorAll('div, aside, section, iframe')).map((el) => {
+  const attr = (el, names) => {
+    for (const name of names) {
+      const value = el.getAttribute(name);
+      if (value && value.trim()) return value.trim();
+    }
+    return null;
+  };
+
+  const textOf = (el) => {
+    const parts = [el.innerText || '', el.getAttribute('aria-label') || '', el.getAttribute('title') || '', el.getAttribute('alt') || ''];
+    return [...new Set(parts.map(x => x.trim()).filter(Boolean))].join(' | ').slice(0, 1200);
+  };
+
+  const elements = Array.from(document.querySelectorAll(
+    'div,aside,section,article,figure,ins,iframe,a,img,video,audio,[id],[class*="ad" i],[class*="advert" i],[class*="sponsor" i],[data-ad],[data-ad-slot],[data-ad-unit],[data-google-query-id]'
+  ));
+
+  return elements.map((el) => {
     const r = el.getBoundingClientRect();
     const style = getComputedStyle(el);
-    const hrefs = Array.from(el.querySelectorAll('a[href]')).map(a => a.href).slice(0, 10);
-    const image_urls = Array.from(el.querySelectorAll('img[src]')).map(img => img.src).slice(0, 10);
+    const hrefs = Array.from(el.querySelectorAll('a[href]')).map(a => a.href).slice(0, 20);
+    if (el.tagName === 'A' && el.href) hrefs.unshift(el.href);
+    const image_urls = [
+      ...Array.from(el.querySelectorAll('img[src]')).map(img => img.currentSrc || img.src),
+      ...(el.tagName === 'IMG' && (el.currentSrc || el.src) ? [el.currentSrc || el.src] : [])
+    ].filter(Boolean).slice(0, 20);
     const video_urls = [
-      ...Array.from(el.querySelectorAll('video[src]')).map(v => v.src),
-      ...Array.from(el.querySelectorAll('video source[src]')).map(s => s.src)
-    ].filter(Boolean).slice(0, 10);
+      ...Array.from(el.querySelectorAll('video[src]')).map(v => v.currentSrc || v.src),
+      ...Array.from(el.querySelectorAll('video source[src]')).map(s => s.src),
+      ...(el.tagName === 'VIDEO' && (el.currentSrc || el.src) ? [el.currentSrc || el.src] : [])
+    ].filter(Boolean).slice(0, 20);
     const audio_urls = [
-      ...Array.from(el.querySelectorAll('audio[src]')).map(a => a.src),
-      ...Array.from(el.querySelectorAll('audio source[src]')).map(s => s.src)
-    ].filter(Boolean).slice(0, 10);
-    const video_posters = Array.from(el.querySelectorAll('video[poster]'))
-      .map(v => v.poster || v.getAttribute('poster')).filter(Boolean).slice(0, 5);
+      ...Array.from(el.querySelectorAll('audio[src]')).map(a => a.currentSrc || a.src),
+      ...Array.from(el.querySelectorAll('audio source[src]')).map(s => s.src),
+      ...(el.tagName === 'AUDIO' && (el.currentSrc || el.src) ? [el.currentSrc || el.src] : [])
+    ].filter(Boolean).slice(0, 20);
+    const video_posters = Array.from(el.querySelectorAll('video[poster]')).map(v => v.poster || v.getAttribute('poster')).filter(Boolean).slice(0, 10);
     const dataset = {};
-    for (const key of ['ad', 'adClient', 'adSlot', 'adUnit', 'googleQueryId']) {
-      const attr = `data-${key.replace(/[A-Z]/g, m => '-' + m.toLowerCase())}`;
-      const value = el.getAttribute(attr);
-      if (value) dataset[attr] = value;
+    for (const key of ['ad', 'adClient', 'adSlot', 'adUnit', 'googleQueryId', 'advertiser', 'advertiserName', 'brand', 'brandName', 'product', 'productName', 'headline', 'cta', 'creativeId']) {
+      const name = `data-${key.replace(/[A-Z]/g, m => '-' + m.toLowerCase())}`;
+      const value = el.getAttribute(name);
+      if (value) dataset[name] = value;
     }
+    const src = attr(el, ['src', 'data-src', 'data-url', 'data-href']);
+    const advertiser_name = attr(el, ['data-advertiser-name', 'data-advertiser', 'data-sponsor', 'data-sponsor-name']);
+    const brand_name = attr(el, ['data-brand-name', 'data-brand']);
+    const product_name = attr(el, ['data-product-name', 'data-product']);
+    const headline = attr(el, ['data-headline', 'data-ad-headline']);
+    const call_to_action = attr(el, ['data-cta', 'data-call-to-action']);
     const viewport_x = Math.round(r.x);
     const viewport_y = Math.round(r.y);
 
     return {
-      tag: el.tagName.toLowerCase(),
-      id: el.id || null,
-      class_name: typeof el.className === 'string' ? el.className.slice(0, 300) : null,
-      aria_label: el.getAttribute('aria-label'),
-      role: el.getAttribute('role'),
-      title: el.getAttribute('title'),
-      text: (el.innerText || '').trim().slice(0, 240),
-      width: Math.round(r.width),
-      height: Math.round(r.height),
-      x: Math.round(viewport_x + window.scrollX),
-      y: Math.round(viewport_y + window.scrollY),
-      viewport_x,
-      viewport_y,
-      visible: r.width > 0 && r.height > 0,
-      iframe_src: el.tagName === 'IFRAME' ? el.getAttribute('src') : null,
-      hrefs,
-      image_urls,
-      video_urls,
-      audio_urls,
-      video_posters,
-      position_mode: style.position || null,
-      z_index: style.zIndex || null,
-      dataset,
-      selector: selectorFor(el)
+      tag: el.tagName.toLowerCase(), id: el.id || null,
+      class_name: typeof el.className === 'string' ? el.className.slice(0, 500) : null,
+      aria_label: el.getAttribute('aria-label'), role: el.getAttribute('role'), title: el.getAttribute('title'),
+      alt: el.getAttribute('alt'), text: textOf(el), width: Math.round(r.width), height: Math.round(r.height),
+      x: Math.round(viewport_x + window.scrollX), y: Math.round(viewport_y + window.scrollY),
+      viewport_x, viewport_y, visible: r.width > 0 && r.height > 0,
+      iframe_src: el.tagName === 'IFRAME' ? el.getAttribute('src') : null, src,
+      hrefs: [...new Set(hrefs)].slice(0, 20), image_urls: [...new Set(image_urls)].slice(0, 20),
+      video_urls: [...new Set(video_urls)].slice(0, 20), audio_urls: [...new Set(audio_urls)].slice(0, 20),
+      video_posters: [...new Set(video_posters)].slice(0, 10), position_mode: style.position || null,
+      z_index: style.zIndex || null, dataset, advertiser_name, brand_name, product_name, headline, call_to_action,
+      frame_element: el.tagName === 'IFRAME', selector: selectorFor(el)
     };
   }).filter(x => x.visible && x.width >= 20 && x.height >= 20)
 }
