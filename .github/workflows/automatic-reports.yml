@@ -1,6 +1,8 @@
 name: Automatic 13-Site Ad Intelligence Reports
 
 on:
+  push:
+    branches: [main]
   schedule:
     - cron: '30 3 * * *'
   workflow_dispatch:
@@ -70,7 +72,7 @@ jobs:
           from urllib.parse import urlparse
           p = urlparse(os.environ['SITE_URL'])
           if p.scheme != 'https' or not p.netloc:
-              raise SystemExit('Publisher URL must be valid HTTPS')
+              raise SystemExit('Publisher URL must be HTTPS')
           assert int(os.environ['MAX_PAGES']) == 5
           assert int(os.environ['MAX_DEPTH']) == 5
           PY
@@ -97,14 +99,14 @@ jobs:
             echo 'Screenshots/images must not be retained in automatic report mode'
             exit 1
           fi
-      - name: Upload latest HTML report separately
+      - name: Upload standalone latest HTML report
         uses: actions/upload-artifact@v4
         with:
           name: latest-html-report-${{ matrix.key }}
           path: ci-output/report/site-report.html
           if-no-files-found: error
           retention-days: 30
-      - name: Upload site HTML and PDF report
+      - name: Upload site HTML/PDF report package
         uses: actions/upload-artifact@v4
         with:
           name: site-report-${{ matrix.key }}
@@ -122,7 +124,7 @@ jobs:
           echo "Site: $SITE_URL" >> "$GITHUB_STEP_SUMMARY"
           echo 'Maximum same-site pages to crawl: 5' >> "$GITHUB_STEP_SUMMARY"
           echo 'Maximum crawl depth: 5' >> "$GITHUB_STEP_SUMMARY"
-          echo 'Outputs: site-report.html + site-report.pdf; screenshots are not retained.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Outputs: HTML + PDF; screenshots are not retained.' >> "$GITHUB_STEP_SUMMARY"
 
   comparison:
     name: 13-Site comparison table
@@ -136,13 +138,13 @@ jobs:
           python-version: '3.12'
       - name: Install report dependencies
         run: python -m pip install -r backend/requirements.txt
-      - name: Download 13 site report packages
+      - name: Download all site report packages
         uses: actions/download-artifact@v4
         with:
           pattern: site-report-*
           path: site-results
           merge-multiple: false
-      - name: Validate exactly 13 site reports
+      - name: Validate all 13 reports
         run: |
           set -euxo pipefail
           count=$(find site-results -mindepth 2 -maxdepth 2 -name site_summary.json -type f | wc -l)
