@@ -1,0 +1,699 @@
+{
+  "campaigns": {
+    "campaigns": [
+      {
+        "campaign_key": "campaign_6f1563d2781cf8bd33cd",
+        "brand_name": null,
+        "advertiser_name": null,
+        "product_name": null,
+        "observations": 4,
+        "observation_share_pct": 14.81,
+        "first_seen": "2026-09-09T05:56:24Z",
+        "last_seen": "2026-09-09T05:56:24Z",
+        "placement_count": 0,
+        "placements": [],
+        "formats": [],
+        "networks": [],
+        "devices": {
+          "mobile": 4
+        },
+        "above_fold_observations": 4,
+        "ocr_text": [],
+        "call_to_action": [],
+        "creative_kinds": [],
+        "screenshot_evidence": [],
+        "creative_image_urls": [
+          "https://tpc.googlesyndication.com/daca_images/simgad/4988182552172404482",
+          "https://tpc.googlesyndication.com/pagead/images/adchoices/adchoices_blue_wb.png",
+          "https://tpc.googlesyndication.com/pagead/images/adchoices/en.png"
+        ],
+        "creative_video_urls": [],
+        "creative_audio_urls": [],
+        "competitor": true,
+        "competitor_label": "google.com",
+        "competitor_evidence": [
+          "destination_domain"
+        ]
+      },
+      {
+        "campaign_key": "campaign_9a9c78425fc02a1ee53a",
+        "brand_name": null,
+        "advertiser_name": null,
+        "product_name": null,
+        "observations": 4,
+        "observation_share_pct": 14.81,
+        "first_seen": "2026-09-09T05:56:24Z",
+        "last_seen": "2026-09-09T05:56:24Z",
+        "placement_count": 0,
+        "placements": [],
+        "formats": [
+          "leaderboard_like"
+        ],
+        "networks": [],
+        "devices": {
+          "mobile": 4
+        },
+        "above_fold_observations": 0,
+        "ocr_text": [],
+        "call_to_action": [],
+        "creative_kinds": [],
+        "screenshot_evidence": [],
+        "creative_image_urls": [],
+        "creative_video_urls": [],
+        "creative_audio_urls": [],
+        "competitor": true,
+        "competitor_label": "google.com",
+        "competitor_evidence": [
+          "destination_domain"
+        ]
+      },
+      {
+        "campaign_key": "campaign_2ce41f616aa6bf921088",
+        "brand_name": null,
+        "advertiser_name": null,
+        "product_name": null,
+        "observations": 2,
+        "observation_share_pct": 7.41,
+        "first_seen": "2026-09-09T05:56:24Z",
+        "last_seen": "2026-09-09T05:56:24Z",
+        "placement_count": 0,
+        "placements": [],
+        "formats": [],
+        "networks": [],
+        "devices": {
+          "mobile": 2
+        },
+        "above_fold_observations": 0,
+        "ocr_text": [],
+        "call_to_action": [],
+        "creative_kinds": [],
+        "screenshot_evidence": [],
+        "creative_image_urls": [],
+        "creative_video_urls": [],
+        "creative_audio_urls": [],
+        "competitor": false,
+        "competitor_label": null,
+        "competitor_evidence": []
+      },
+      {
+        "campaign_key": "campaign_3791fb14746a1a7cd2f9",
+        "brand_name": null,
+        "advertiser_name": null,
+        "product_name": null,
+        "observations": 2,
+        "observation_share_pct": 7.41,
+        "first_seen": "2026-09-09T05:56:24Z",
+        "last_seen": "2026-09-09T05:56:24Z",
+        "placement_count": 0,
+        "placements": [],
+        "formats": [],
+        "networks": [],
+        "devices": {
+          "mobile": 2
+        },
+        "above_fold_observations": 0,
+        "ocr_text": [],
+        "call_to_action": [],
+        "creative_kinds": [],
+        "screenshot_evidence": [],
+        "creative_image_urls": [],
+        "creative_video_urls": [],
+        "creative_audio_urls": [],
+        "competitor": false,
+        "competitor_label": null,
+        "competitor_evidence": []
+      },
+      {
+        "campaign_key": "campaign_4822388342bec690a30c",
+        "brand_name": null,
+        "advertiser_name": null,
+        "product_name": null,
+        "observations": 2,
+        "observation_share_pct": 7.41,
+        "first_seen": "2026-09-09T05:56:24Z",
+        "last_seen": "2026-09-09T05:56:24Z",
+        "placement_count": 0,
+        "placements": [],
+        "formats": [],
+        "networks": [],
+        "devices": {
+          "mobile": 2
+        },
+        "above_fold_observations": 0,
+        "ocr_text": [],
+        "call_to_action": [],
+        "creative_kinds": [],
+        "screenshot_evidence": [],
+        "creative_image_urls": [],
+        "creative_video_urls": [],
+        "creative_audio_urls": [],
+        "competitor": false,
+        "competitor_label": null,
+        "competitor_evidence": []
+      },
+      {
+        "campaign_key": "campaign_501e650f9b25c7fc7539",
+        "brand_name": null,
+        "advertiser_name": null,
+        "product_name": null,
+        "observations": 2,
+        "observation_share_pct": 7.41,
+        "first_seen": "2026-09-09T05:56:24Z",
+        "last_seen": "2026-09-09T05:56:24Z",
+        "placement_count": 0,
+        "placements": [],
+        "formats": [],
+        "networks": [],
+        "devices": {
+          "mobile": 2
+        },
+        "above_fold_observations": 0,
+        "ocr_text": [],
+        "call_to_action": [],
+        "creative_kinds": [],
+        "screenshot_evidence": [],
+        "creative_image_urls": [],
+        "creative_video_urls": [],
+        "creative_audio_urls": [],
+        "competitor": false,
+        "competitor_label": null,
+        "competitor_evidence": []
+      },
+      {
+        "campaign_key": "campaign_72b2e40b5b8d0116fba6",
+        "brand_name": null,
+        "advertiser_name": null,
+        "product_name": null,
+        "observations": 2,
+        "observation_share_pct": 7.41,
+        "first_seen": "2026-09-09T05:56:24Z",
+        "last_seen": "2026-09-09T05:56:24Z",
+        "placement_count": 0,
+        "placements": [],
+        "formats": [
+          "leaderboard_like"
+        ],
+        "networks": [],
+        "devices": {
+          "mobile": 2
+        },
+        "above_fold_observations": 0,
+        "ocr_text": [],
+        "call_to_action": [],
+        "creative_kinds": [],
+        "screenshot_evidence": [],
+        "creative_image_urls": [],
+        "creative_video_urls": [],
+        "creative_audio_urls": [],
+        "competitor": false,
+        "competitor_label": null,
+        "competitor_evidence": []
+      },
+      {
+        "campaign_key": "campaign_909cbb86a9415c2e8113",
+        "brand_name": null,
+        "advertiser_name": null,
+        "product_name": null,
+        "observations": 2,
+        "observation_share_pct": 7.41,
+        "first_seen": "2026-09-09T05:56:24Z",
+        "last_seen": "2026-09-09T05:56:24Z",
+        "placement_count": 0,
+        "placements": [],
+        "formats": [],
+        "networks": [],
+        "devices": {
+          "mobile": 2
+        },
+        "above_fold_observations": 0,
+        "ocr_text": [],
+        "call_to_action": [],
+        "creative_kinds": [],
+        "screenshot_evidence": [],
+        "creative_image_urls": [],
+        "creative_video_urls": [],
+        "creative_audio_urls": [],
+        "competitor": true,
+        "competitor_label": "google.com",
+        "competitor_evidence": [
+          "destination_domain"
+        ]
+      },
+      {
+        "campaign_key": "campaign_b8f956f285852dea0e5c",
+        "brand_name": null,
+        "advertiser_name": null,
+        "product_name": null,
+        "observations": 2,
+        "observation_share_pct": 7.41,
+        "first_seen": "2026-09-09T05:56:24Z",
+        "last_seen": "2026-09-09T05:56:24Z",
+        "placement_count": 0,
+        "placements": [],
+        "formats": [],
+        "networks": [],
+        "devices": {
+          "mobile": 2
+        },
+        "above_fold_observations": 2,
+        "ocr_text": [],
+        "call_to_action": [],
+        "creative_kinds": [],
+        "screenshot_evidence": [],
+        "creative_image_urls": [
+          "https://tpc.googlesyndication.com/daca_images/simgad/4988182552172404482"
+        ],
+        "creative_video_urls": [],
+        "creative_audio_urls": [],
+        "competitor": false,
+        "competitor_label": null,
+        "competitor_evidence": []
+      },
+      {
+        "campaign_key": "campaign_be2bc3d3abbd698da92c",
+        "brand_name": null,
+        "advertiser_name": null,
+        "product_name": null,
+        "observations": 2,
+        "observation_share_pct": 7.41,
+        "first_seen": "2026-09-09T05:56:24Z",
+        "last_seen": "2026-09-09T05:56:24Z",
+        "placement_count": 0,
+        "placements": [],
+        "formats": [
+          "leaderboard_like"
+        ],
+        "networks": [],
+        "devices": {
+          "mobile": 2
+        },
+        "above_fold_observations": 0,
+        "ocr_text": [],
+        "call_to_action": [],
+        "creative_kinds": [],
+        "screenshot_evidence": [],
+        "creative_image_urls": [],
+        "creative_video_urls": [],
+        "creative_audio_urls": [],
+        "competitor": false,
+        "competitor_label": null,
+        "competitor_evidence": []
+      },
+      {
+        "campaign_key": "campaign_8b0880700d55861b6bbc",
+        "brand_name": null,
+        "advertiser_name": null,
+        "product_name": null,
+        "observations": 1,
+        "observation_share_pct": 3.7,
+        "first_seen": "2026-09-09T05:56:24Z",
+        "last_seen": "2026-09-09T05:56:24Z",
+        "placement_count": 0,
+        "placements": [],
+        "formats": [
+          "sponsored_content"
+        ],
+        "networks": [],
+        "devices": {
+          "mobile": 1
+        },
+        "above_fold_observations": 1,
+        "ocr_text": [],
+        "call_to_action": [],
+        "creative_kinds": [],
+        "screenshot_evidence": [],
+        "creative_image_urls": [],
+        "creative_video_urls": [],
+        "creative_audio_urls": [],
+        "competitor": false,
+        "competitor_label": null,
+        "competitor_evidence": []
+      },
+      {
+        "campaign_key": "campaign_98590ac2509f785e90e9",
+        "brand_name": null,
+        "advertiser_name": null,
+        "product_name": null,
+        "observations": 1,
+        "observation_share_pct": 3.7,
+        "first_seen": "2026-09-09T05:56:24Z",
+        "last_seen": "2026-09-09T05:56:24Z",
+        "placement_count": 1,
+        "placements": [
+          "div-gpt-ad-1567824605790-0"
+        ],
+        "formats": [
+          "billboard_like"
+        ],
+        "networks": [],
+        "devices": {
+          "mobile": 1
+        },
+        "above_fold_observations": 1,
+        "ocr_text": [],
+        "call_to_action": [],
+        "creative_kinds": [],
+        "screenshot_evidence": [],
+        "creative_image_urls": [],
+        "creative_video_urls": [],
+        "creative_audio_urls": [],
+        "competitor": false,
+        "competitor_label": null,
+        "competitor_evidence": []
+      },
+      {
+        "campaign_key": "campaign_edfb13b9180e4368a7e4",
+        "brand_name": null,
+        "advertiser_name": null,
+        "product_name": null,
+        "observations": 1,
+        "observation_share_pct": 3.7,
+        "first_seen": "2026-09-09T05:56:24Z",
+        "last_seen": "2026-09-09T05:56:24Z",
+        "placement_count": 0,
+        "placements": [],
+        "formats": [
+          "billboard_like"
+        ],
+        "networks": [],
+        "devices": {
+          "mobile": 1
+        },
+        "above_fold_observations": 1,
+        "ocr_text": [],
+        "call_to_action": [],
+        "creative_kinds": [],
+        "screenshot_evidence": [],
+        "creative_image_urls": [],
+        "creative_video_urls": [],
+        "creative_audio_urls": [],
+        "competitor": false,
+        "competitor_label": null,
+        "competitor_evidence": []
+      }
+    ],
+    "campaign_count": 13,
+    "competitors": [],
+    "competitor_ads": [
+      {
+        "competitor": "google.com",
+        "advertiser_name": "google.com",
+        "observations": 10,
+        "observation_share_pct": 37.04,
+        "campaign_count": 3,
+        "campaign_keys": [
+          "campaign_6f1563d2781cf8bd33cd",
+          "campaign_909cbb86a9415c2e8113",
+          "campaign_9a9c78425fc02a1ee53a"
+        ],
+        "pages_observed": [
+          "https://economictimes.indiatimes.com/"
+        ],
+        "evidence": [
+          "destination_domain"
+        ],
+        "ocr_text": [],
+        "products": [],
+        "screenshots": []
+      }
+    ],
+    "competitor_count": 1,
+    "total_observations": 27
+  },
+  "devices": {
+    "campaigns": [
+      {
+        "campaign_key": "campaign_6f1563d2781cf8bd33cd",
+        "desktop_observations": 0,
+        "mobile_observations": 4,
+        "desktop_only": false,
+        "mobile_only": true,
+        "both_devices": false,
+        "desktop_placements": [],
+        "mobile_placements": [],
+        "shared_placements": []
+      },
+      {
+        "campaign_key": "campaign_9a9c78425fc02a1ee53a",
+        "desktop_observations": 0,
+        "mobile_observations": 4,
+        "desktop_only": false,
+        "mobile_only": true,
+        "both_devices": false,
+        "desktop_placements": [],
+        "mobile_placements": [],
+        "shared_placements": []
+      },
+      {
+        "campaign_key": "campaign_2ce41f616aa6bf921088",
+        "desktop_observations": 0,
+        "mobile_observations": 2,
+        "desktop_only": false,
+        "mobile_only": true,
+        "both_devices": false,
+        "desktop_placements": [],
+        "mobile_placements": [],
+        "shared_placements": []
+      },
+      {
+        "campaign_key": "campaign_3791fb14746a1a7cd2f9",
+        "desktop_observations": 0,
+        "mobile_observations": 2,
+        "desktop_only": false,
+        "mobile_only": true,
+        "both_devices": false,
+        "desktop_placements": [],
+        "mobile_placements": [],
+        "shared_placements": []
+      },
+      {
+        "campaign_key": "campaign_4822388342bec690a30c",
+        "desktop_observations": 0,
+        "mobile_observations": 2,
+        "desktop_only": false,
+        "mobile_only": true,
+        "both_devices": false,
+        "desktop_placements": [],
+        "mobile_placements": [],
+        "shared_placements": []
+      },
+      {
+        "campaign_key": "campaign_501e650f9b25c7fc7539",
+        "desktop_observations": 0,
+        "mobile_observations": 2,
+        "desktop_only": false,
+        "mobile_only": true,
+        "both_devices": false,
+        "desktop_placements": [],
+        "mobile_placements": [],
+        "shared_placements": []
+      },
+      {
+        "campaign_key": "campaign_72b2e40b5b8d0116fba6",
+        "desktop_observations": 0,
+        "mobile_observations": 2,
+        "desktop_only": false,
+        "mobile_only": true,
+        "both_devices": false,
+        "desktop_placements": [],
+        "mobile_placements": [],
+        "shared_placements": []
+      },
+      {
+        "campaign_key": "campaign_909cbb86a9415c2e8113",
+        "desktop_observations": 0,
+        "mobile_observations": 2,
+        "desktop_only": false,
+        "mobile_only": true,
+        "both_devices": false,
+        "desktop_placements": [],
+        "mobile_placements": [],
+        "shared_placements": []
+      },
+      {
+        "campaign_key": "campaign_b8f956f285852dea0e5c",
+        "desktop_observations": 0,
+        "mobile_observations": 2,
+        "desktop_only": false,
+        "mobile_only": true,
+        "both_devices": false,
+        "desktop_placements": [],
+        "mobile_placements": [],
+        "shared_placements": []
+      },
+      {
+        "campaign_key": "campaign_be2bc3d3abbd698da92c",
+        "desktop_observations": 0,
+        "mobile_observations": 2,
+        "desktop_only": false,
+        "mobile_only": true,
+        "both_devices": false,
+        "desktop_placements": [],
+        "mobile_placements": [],
+        "shared_placements": []
+      },
+      {
+        "campaign_key": "campaign_8b0880700d55861b6bbc",
+        "desktop_observations": 0,
+        "mobile_observations": 1,
+        "desktop_only": false,
+        "mobile_only": true,
+        "both_devices": false,
+        "desktop_placements": [],
+        "mobile_placements": [],
+        "shared_placements": []
+      },
+      {
+        "campaign_key": "campaign_98590ac2509f785e90e9",
+        "desktop_observations": 0,
+        "mobile_observations": 1,
+        "desktop_only": false,
+        "mobile_only": true,
+        "both_devices": false,
+        "desktop_placements": [],
+        "mobile_placements": [
+          "div-gpt-ad-1567824605790-0"
+        ],
+        "shared_placements": []
+      },
+      {
+        "campaign_key": "campaign_edfb13b9180e4368a7e4",
+        "desktop_observations": 0,
+        "mobile_observations": 1,
+        "desktop_only": false,
+        "mobile_only": true,
+        "both_devices": false,
+        "desktop_placements": [],
+        "mobile_placements": [],
+        "shared_placements": []
+      }
+    ],
+    "campaign_count": 13,
+    "both_device_campaigns": 0,
+    "desktop_only_campaigns": 0,
+    "mobile_only_campaigns": 13
+  },
+  "history": {
+    "changes": [],
+    "change_count": 0,
+    "new_campaigns": 0,
+    "disappeared_campaigns": 0,
+    "continued_campaigns": 0,
+    "creative_changes": 0,
+    "creative_added": 0,
+    "creative_removed": 0,
+    "placement_changes": 0,
+    "device_targeting_changes": 0,
+    "network_changes": 0,
+    "cpm_changes": 0,
+    "snapshot_count": 1,
+    "observed_at": [
+      "2026-09-09T05:56:24Z"
+    ]
+  },
+  "advertiser_confidence": [
+    {
+      "campaign_key": "campaign_6f1563d2781cf8bd33cd",
+      "level": "low",
+      "score": 20,
+      "signals": [
+        "landing_destination"
+      ],
+      "observation_count": 4
+    },
+    {
+      "campaign_key": "campaign_909cbb86a9415c2e8113",
+      "level": "low",
+      "score": 20,
+      "signals": [
+        "landing_destination"
+      ],
+      "observation_count": 2
+    },
+    {
+      "campaign_key": "campaign_9a9c78425fc02a1ee53a",
+      "level": "low",
+      "score": 20,
+      "signals": [
+        "landing_destination"
+      ],
+      "observation_count": 4
+    },
+    {
+      "campaign_key": "campaign_2ce41f616aa6bf921088",
+      "level": "unverified",
+      "score": 0,
+      "signals": [],
+      "observation_count": 2
+    },
+    {
+      "campaign_key": "campaign_3791fb14746a1a7cd2f9",
+      "level": "unverified",
+      "score": 0,
+      "signals": [],
+      "observation_count": 2
+    },
+    {
+      "campaign_key": "campaign_4822388342bec690a30c",
+      "level": "unverified",
+      "score": 0,
+      "signals": [],
+      "observation_count": 2
+    },
+    {
+      "campaign_key": "campaign_501e650f9b25c7fc7539",
+      "level": "unverified",
+      "score": 0,
+      "signals": [],
+      "observation_count": 2
+    },
+    {
+      "campaign_key": "campaign_72b2e40b5b8d0116fba6",
+      "level": "unverified",
+      "score": 0,
+      "signals": [],
+      "observation_count": 2
+    },
+    {
+      "campaign_key": "campaign_8b0880700d55861b6bbc",
+      "level": "unverified",
+      "score": 0,
+      "signals": [],
+      "observation_count": 1
+    },
+    {
+      "campaign_key": "campaign_98590ac2509f785e90e9",
+      "level": "unverified",
+      "score": 0,
+      "signals": [],
+      "observation_count": 1
+    },
+    {
+      "campaign_key": "campaign_b8f956f285852dea0e5c",
+      "level": "unverified",
+      "score": 0,
+      "signals": [],
+      "observation_count": 2
+    },
+    {
+      "campaign_key": "campaign_be2bc3d3abbd698da92c",
+      "level": "unverified",
+      "score": 0,
+      "signals": [],
+      "observation_count": 2
+    },
+    {
+      "campaign_key": "campaign_edfb13b9180e4368a7e4",
+      "level": "unverified",
+      "score": 0,
+      "signals": [],
+      "observation_count": 1
+    }
+  ],
+  "ad_request_resolution": {
+    "resolved_slots": [],
+    "resolved_slot_count": 0,
+    "request_count": 0
+  },
+  "observation_count": 27
+}
