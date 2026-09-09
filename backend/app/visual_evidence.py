@@ -27,11 +27,11 @@ async def capture_dom_ad_evidence(
     page: Page,
     dom_candidates: list[dict[str, Any]],
     output_dir: str | Path,
-    max_candidates: int = 40,
+    max_candidates: int = 120,
     capture_assets: bool = True,
     analyze_visuals: bool = True,
 ) -> list[dict[str, Any]]:
-    """Capture screenshots, geometry, and bounded image/video/audio creative assets."""
+    """Capture high-recall rendered ad screenshots, identity metadata and creative assets."""
     run_dir = Path(output_dir)
     evidence_dir = run_dir / "ad_candidates"
     evidence_dir.mkdir(parents=True, exist_ok=True)
@@ -46,76 +46,41 @@ async def capture_dom_ad_evidence(
         if not selector or locator is None:
             continue
         try:
-            await locator.scroll_into_view_if_needed(timeout=1500)
+            await locator.scroll_into_view_if_needed(timeout=2000)
             box = await locator.bounding_box()
             if not box or box["width"] < 20 or box["height"] < 20:
                 continue
-            safe_id = hashlib.sha1(
-                f"{candidate.get('frame_index', 0)}:{selector}".encode("utf-8")
-            ).hexdigest()[:12]
+            safe_id = hashlib.sha1(f"{candidate.get('frame_index', 0)}:{selector}".encode("utf-8")).hexdigest()[:12]
             screenshot_path = evidence_dir / f"candidate_{index:03d}_{safe_id}.png"
             await locator.screenshot(path=str(screenshot_path), animations="disabled")
             candidate_images = list(candidate.get("image_urls") or [])
             candidate_videos = list(candidate.get("video_urls") or [])
             candidate_audio = list(candidate.get("audio_urls") or [])
             candidate_posters = list(candidate.get("video_posters") or [])
-            asset_urls.extend(candidate_images)
-            asset_urls.extend(candidate_videos)
-            asset_urls.extend(candidate_audio)
-            asset_urls.extend(candidate_posters)
+            asset_urls.extend(candidate_images + candidate_videos + candidate_audio + candidate_posters)
             results.append({
-                "candidate_index": index,
-                "frame_index": candidate.get("frame_index", 0),
-                "frame_url": candidate.get("frame_url"),
-                "selector": selector,
-                "tag": candidate.get("tag"),
-                "id": candidate.get("id"),
-                "class_name": candidate.get("class_name"),
-                "text": candidate.get("text"),
-                "iframe_src": candidate.get("iframe_src"),
-                "hrefs": candidate.get("hrefs", []),
-                "image_urls": candidate_images,
-                "video_urls": candidate_videos,
-                "audio_urls": candidate_audio,
-                "video_posters": candidate_posters,
-                "bbox": {
-                    "x": round(box["x"]),
-                    "y": round(box["y"]),
-                    "width": round(box["width"]),
-                    "height": round(box["height"]),
-                },
+                "candidate_index": index, "frame_index": candidate.get("frame_index", 0), "frame_url": candidate.get("frame_url"),
+                "selector": selector, "tag": candidate.get("tag"), "id": candidate.get("id"), "class_name": candidate.get("class_name"),
+                "aria_label": candidate.get("aria_label"), "role": candidate.get("role"), "title": candidate.get("title"),
+                "alt": candidate.get("alt"), "text": candidate.get("text"), "advertiser_name": candidate.get("advertiser_name"),
+                "brand_name": candidate.get("brand_name"), "product_name": candidate.get("product_name"), "headline": candidate.get("headline"),
+                "call_to_action": candidate.get("call_to_action"), "dataset": candidate.get("dataset", {}), "iframe_src": candidate.get("iframe_src"),
+                "hrefs": candidate.get("hrefs", []), "image_urls": candidate_images, "video_urls": candidate_videos,
+                "audio_urls": candidate_audio, "video_posters": candidate_posters,
+                "bbox": {"x": round(box["x"]), "y": round(box["y"]), "width": round(box["width"]), "height": round(box["height"])},
                 "screenshot": str(screenshot_path),
             })
         except Exception as exc:
-            results.append({
-                "candidate_index": index,
-                "frame_index": candidate.get("frame_index", 0),
-                "frame_url": candidate.get("frame_url"),
-                "selector": selector,
-                "error": str(exc),
-            })
+            results.append({"candidate_index": index, "frame_index": candidate.get("frame_index", 0), "frame_url": candidate.get("frame_url"), "selector": selector, "error": str(exc)})
 
     assets = await capture_creative_assets(asset_urls, run_dir) if capture_assets else []
     asset_by_url = {str(item["url"]): item for item in assets if item.get("url")}
     for item in results:
-        urls = [
-            *(item.get("image_urls") or []),
-            *(item.get("video_urls") or []),
-            *(item.get("audio_urls") or []),
-            *(item.get("video_posters") or []),
-        ]
+        urls = [*(item.get("image_urls") or []), *(item.get("video_urls") or []), *(item.get("audio_urls") or []), *(item.get("video_posters") or [])]
         item["creative_assets"] = [asset_by_url[url] for url in urls if url in asset_by_url]
         if analyze_visuals and item.get("screenshot"):
-            item.update(
-                classify_visual_evidence(
-                    item["screenshot"], item.get("bbox"), item.get("creative_assets")
-                )
-            )
+            item.update(classify_visual_evidence(item["screenshot"], item.get("bbox"), item.get("creative_assets")))
 
-    (run_dir / "creative_assets.json").write_text(
-        json.dumps(assets, indent=2), encoding="utf-8"
-    )
-    (run_dir / "visual_evidence.json").write_text(
-        json.dumps(results, indent=2), encoding="utf-8"
-    )
+    (run_dir / "creative_assets.json").write_text(json.dumps(assets, indent=2), encoding="utf-8")
+    (run_dir / "visual_evidence.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
     return results
