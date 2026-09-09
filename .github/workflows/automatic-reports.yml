@@ -8,9 +8,11 @@ on:
   workflow_dispatch:
 
 env:
-  MAX_PAGES: '5'
+  MAX_PAGES: '50'
   MAX_DEPTH: '5'
+  MAX_DISCOVERED_URLS: '5000'
   BOTH_DEVICES: 'true'
+  MAX_RUNTIME_MINUTES: '25'
   PYTHONPATH: backend
 
 jobs:
@@ -73,32 +75,34 @@ jobs:
           p = urlparse(os.environ['SITE_URL'])
           if p.scheme != 'https' or not p.netloc:
               raise SystemExit('Publisher URL must be HTTPS')
-          assert int(os.environ['MAX_PAGES']) == 5
+          assert int(os.environ['MAX_PAGES']) == 50
           assert int(os.environ['MAX_DEPTH']) == 5
+          assert int(os.environ['MAX_DISCOVERED_URLS']) == 5000
+          assert os.environ['BOTH_DEVICES'].lower() == 'true'
           PY
-      - name: Run 5-page depth-5 scrape with retries
+      - name: Run site-wide crawl with retries
         shell: bash
         run: |
           set -e
           for attempt in 1 2 3; do
-            echo "${REPORT_KEY}: scrape attempt $attempt/3"
+            echo "${REPORT_KEY}: crawl attempt $attempt/3"
             rm -rf ci-output data/runs
             if python scripts/ci_site_scrape.py; then break; fi
             if [ "$attempt" = 3 ]; then exit 1; fi
             sleep 15
           done
-      - name: Verify HTML/PDF only and no screenshot evidence
+      - name: Verify report and evidence coverage
         shell: bash
         run: |
           set -euxo pipefail
           test -s ci-output/report/site-report.html
           test -s ci-output/report/site-report.pdf
           test -s ci-output/report/site_summary.json
+          test -s ci-output/report/crawl_manifest.json
           test -s ci-output/run_metadata.json
-          if find data/runs -type f \( -path '*/ad_candidates/*.png' -o -path '*/ad_candidates/*.jpg' -o -path '*/ad_candidates/*.jpeg' -o -path '*/ad_candidates/*.webp' -o -name 'screenshot.png' \) -print -quit | grep -q .; then
-            echo 'Screenshot evidence must not be retained in automatic report mode'
-            exit 1
-          fi
+          test -s ci-output/crawl_results.json
+          test "$(find data/runs -name result.json -type f | wc -l)" -gt 0
+          test "$(find data/runs -name screenshot.png -type f | wc -l)" -gt 0
       - name: Upload standalone latest HTML report
         uses: actions/upload-artifact@v4
         with:
@@ -106,7 +110,7 @@ jobs:
           path: ci-output/report/site-report.html
           if-no-files-found: error
           retention-days: 30
-      - name: Upload site HTML/PDF report package
+      - name: Upload site report and evidence package
         uses: actions/upload-artifact@v4
         with:
           name: site-report-${{ matrix.key }}
@@ -114,7 +118,10 @@ jobs:
             ci-output/report/site-report.html
             ci-output/report/site-report.pdf
             ci-output/report/site_summary.json
+            ci-output/report/crawl_manifest.json
             ci-output/run_metadata.json
+            ci-output/crawl_results.json
+            data/runs/**
           if-no-files-found: error
           retention-days: 30
       - name: Summary
@@ -122,9 +129,11 @@ jobs:
         run: |
           echo "## ${REPORT_KEY}" >> "$GITHUB_STEP_SUMMARY"
           echo "Site: $SITE_URL" >> "$GITHUB_STEP_SUMMARY"
-          echo 'Maximum same-site pages to crawl: 5' >> "$GITHUB_STEP_SUMMARY"
-          echo 'Maximum crawl depth: 5' >> "$GITHUB_STEP_SUMMARY"
-          echo 'Outputs: HTML + PDF; screenshot evidence is not retained.' >> "$GITHUB_STEP_SUMMARY"
+          echo "Maximum pages: $MAX_PAGES" >> "$GITHUB_STEP_SUMMARY"
+          echo "Maximum crawl depth: $MAX_DEPTH" >> "$GITHUB_STEP_SUMMARY"
+          echo "Maximum discovered URLs: $MAX_DISCOVERED_URLS" >> "$GITHUB_STEP_SUMMARY"
+          echo "Desktop + mobile: $BOTH_DEVICES" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Evidence, including screenshots and candidate captures, is retained.' >> "$GITHUB_STEP_SUMMARY"
 
   comparison:
     name: 13-Site comparison table
@@ -155,7 +164,6 @@ jobs:
           test -s comparison/comparison.html
           test -s comparison/comparison.pdf
           grep -q '13-Site Ad Intelligence Comparison' comparison/comparison.html
-          grep -q 'Maximum same-site pages to crawl = 5' comparison/comparison.html
           grep -q 'Maximum crawl depth = 5' comparison/comparison.html
       - name: Upload comparison HTML
         uses: actions/upload-artifact@v4
@@ -174,5 +182,5 @@ jobs:
       - name: Summary
         run: |
           echo '## 13-Site Comparison' >> "$GITHUB_STEP_SUMMARY"
-          echo 'All 13 sites: 5 pages, depth 5, desktop + mobile.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'All 13 configured publishers are compared using the same crawl controls.' >> "$GITHUB_STEP_SUMMARY"
           echo 'Comparison table available as HTML and PDF.' >> "$GITHUB_STEP_SUMMARY"
