@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from app.crawler.crawler import SiteCrawler
-from app.crawler.models import CrawlRequest, CrawlResult
+from app.crawler.models import CrawlResult
 from app.report_html import render_html_report
 from app.report_intelligence import build_report_intelligence
 from app.report_pdf import render_pdf_report
@@ -46,6 +46,21 @@ def _collect_observations(data_root: Path) -> tuple[list[dict], list[str]]:
     return observations, run_ids
 
 
+def _remove_screenshot_evidence(data_root: Path) -> None:
+    for path in data_root.rglob("screenshot.png"):
+        path.unlink(missing_ok=True)
+    for path in data_root.rglob("ad_candidates"):
+        if path.is_dir():
+            for screenshot in path.glob("*.png"):
+                screenshot.unlink(missing_ok=True)
+            for screenshot in path.glob("*.jpg"):
+                screenshot.unlink(missing_ok=True)
+            for screenshot in path.glob("*.jpeg"):
+                screenshot.unlink(missing_ok=True)
+            for screenshot in path.glob("*.webp"):
+                screenshot.unlink(missing_ok=True)
+
+
 def _render_site_report(data_root: Path, report_root: Path, site_url: str) -> tuple[list[str], dict]:
     observations, run_ids = _collect_observations(data_root)
     intelligence = build_report_intelligence(observations)
@@ -65,9 +80,7 @@ def _render_site_report(data_root: Path, report_root: Path, site_url: str) -> tu
         "competitor_count": intelligence.get("campaigns", {}).get("competitor_count", 0),
         "devices": intelligence.get("devices", {}),
     })
-    # Automatic reports intentionally do not retain screenshot files.
-    for path in data_root.rglob("screenshot.png"):
-        path.unlink(missing_ok=True)
+    _remove_screenshot_evidence(data_root)
     return run_ids, intelligence
 
 
@@ -77,7 +90,7 @@ def _write_report_index(report_root: Path, site_url: str) -> None:
         f"<title>Ad Intelligence Site Report</title><style>body{{font-family:system-ui,sans-serif;max-width:900px;margin:auto;padding:32px;line-height:1.5}}li{{margin:14px 0}}</style></head>"
         f"<body><h1>Ad Intelligence Site Report</h1><p><strong>Site:</strong> {site_url}</p>"
         f"<ul><li><a href='site-report.html'>HTML site report</a></li><li><a href='site-report.pdf'>PDF site report</a></li></ul>"
-        f"<p>Automatic report mode stores HTML/PDF reports only; screenshots are intentionally not retained.</p></body></html>",
+        f"<p>Automatic report mode stores HTML/PDF reports only; screenshot evidence is intentionally not retained.</p></body></html>",
         encoding="utf-8",
     )
 
@@ -94,19 +107,10 @@ async def _run() -> dict[str, object]:
     timeout_ms = int(os.environ.get("TIMEOUT_MS", "30000"))
 
     if both:
-        await crawl_site(
-            crawler, root_url=url, max_pages=max_pages, max_depth=max_depth,
-            wait_ms=wait_ms, timeout_ms=timeout_ms, device="desktop",
-        )
-        await crawl_site(
-            crawler, root_url=url, max_pages=max_pages, max_depth=max_depth,
-            wait_ms=wait_ms, timeout_ms=timeout_ms, device="mobile",
-        )
+        await crawl_site(crawler, root_url=url, max_pages=max_pages, max_depth=max_depth, wait_ms=wait_ms, timeout_ms=timeout_ms, device="desktop")
+        await crawl_site(crawler, root_url=url, max_pages=max_pages, max_depth=max_depth, wait_ms=wait_ms, timeout_ms=timeout_ms, device="mobile")
     else:
-        await crawl_site(
-            crawler, root_url=url, max_pages=max_pages, max_depth=max_depth,
-            wait_ms=wait_ms, timeout_ms=timeout_ms, device="desktop",
-        )
+        await crawl_site(crawler, root_url=url, max_pages=max_pages, max_depth=max_depth, wait_ms=wait_ms, timeout_ms=timeout_ms, device="desktop")
 
     run_ids, intelligence = _render_site_report(data_root, out / "report", url)
     _write_report_index(out / "report", url)
