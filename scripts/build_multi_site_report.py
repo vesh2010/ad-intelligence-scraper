@@ -70,7 +70,7 @@ def build_html(summaries: list[dict[str, Any]]) -> str:
 body{{font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:1800px;margin:auto;padding:32px;line-height:1.45}}
 table{{border-collapse:collapse;width:100%;margin:18px 0;font-size:14px}}th,td{{border:1px solid #d1d5db;padding:8px;text-align:left;vertical-align:top}}th{{background:#f3f4f6}}tfoot{{font-weight:700;background:#f9fafb}}.note{{padding:12px;border:1px solid #ddd;border-radius:8px}}
 </style></head><body><h1>13-Site Ad Intelligence Comparison</h1>
-<p>Automatic comparison of all 13 configured publishers. Each site uses <strong>Maximum pages per device = 50</strong>, <strong>Maximum crawl depth = 5</strong>, <strong>Maximum discovered URLs = 5,000</strong>, and desktop + mobile collection.</p>
+<p>Automatic comparison of all 13 configured publishers. Each site uses <strong>Maximum pages per device = 5</strong>, <strong>Maximum crawl depth = 5</strong>, <strong>Maximum discovered URLs = 1,000</strong>, and desktop + mobile collection.</p>
 <div class='note'>Counts are observed evidence, not market share. Advertiser/brand identity is reported only when supported by evidence and is never inferred from OCR alone. Coverage distinguishes discovered, crawled, failed and successfully observed pages.</div>
 <table><thead><tr><th>Site</th><th>URL</th><th>URLs discovered</th><th>URLs crawled</th><th>URLs failed</th><th>Coverage</th><th>Ad observations</th><th>Campaigns</th><th>Competitor ads</th><th>Desktop-only</th><th>Mobile-only</th><th>Both devices</th></tr></thead><tbody>{rows}</tbody>
 <tfoot><tr><td colspan='2'>Total / average</td><td>{total['urls_discovered']}</td><td>{total['urls_crawled']}</td><td>{total['urls_failed']}</td><td>{avg_coverage}% avg.</td><td>{total['observations']}</td><td>{total['campaigns']}</td><td>{total['competitors']}</td><td>{total['desktop_only']}</td><td>{total['mobile_only']}</td><td>{total['both_devices']}</td></tr></tfoot></table>
@@ -82,7 +82,7 @@ def build_pdf(summaries: list[dict[str, Any]]) -> bytes:
     styles = getSampleStyleSheet()
     small = ParagraphStyle("small", parent=styles["BodyText"], fontSize=6.5, leading=8)
     title = ParagraphStyle("title", parent=styles["Title"], fontSize=18, leading=22)
-    story: list[Any] = [Paragraph("13-Site Ad Intelligence Comparison", title), Paragraph("Maximum 50 pages per device, crawl depth 5, maximum 5,000 discovered URLs, desktop + mobile.", small), Spacer(1, 5 * mm)]
+    story: list[Any] = [Paragraph("13-Site Ad Intelligence Comparison", title), Paragraph("Maximum 5 pages per device, crawl depth 5, maximum 1,000 discovered URLs, desktop + mobile.", small), Spacer(1, 5 * mm)]
     data = [["Site", "URL", "Discovered", "Crawled", "Failed", "Coverage", "Ads", "Campaigns", "Competitors", "Desktop", "Mobile", "Both"]]
     for s in summaries:
         data.append([Paragraph(str(s["key"]), small), Paragraph(str(s["site_url"]), small), str(s["urls_discovered"]), str(s["urls_crawled"]), str(s["urls_failed"]), f"{s['coverage_pct']}%", str(s["observations"]), str(s["campaigns"]), str(s["competitors"]), str(s["desktop_only"]), str(s["mobile_only"]), str(s["both_devices"])])
