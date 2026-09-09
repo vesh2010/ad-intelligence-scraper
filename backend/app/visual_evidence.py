@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -31,10 +32,16 @@ async def capture_dom_ad_evidence(
     capture_assets: bool = True,
     analyze_visuals: bool = True,
 ) -> list[dict[str, Any]]:
-    """Capture high-recall rendered ad screenshots, identity metadata and creative assets."""
+    """Capture rendered-ad metadata and optionally retain screenshot evidence.
+
+    Automatic reports set AD_SCRAPER_RETAIN_SCREENSHOTS=false so screenshot files are
+    not generated or retained there, while DOM/network/creative metadata remains usable.
+    """
     run_dir = Path(output_dir)
+    retain_screenshots = os.environ.get("AD_SCRAPER_RETAIN_SCREENSHOTS", "true").lower() == "true"
     evidence_dir = run_dir / "ad_candidates"
-    evidence_dir.mkdir(parents=True, exist_ok=True)
+    if retain_screenshots:
+        evidence_dir.mkdir(parents=True, exist_ok=True)
 
     candidates = classify_dom_candidates(dom_candidates)[:max_candidates]
     results: list[dict[str, Any]] = []
@@ -50,15 +57,12 @@ async def capture_dom_ad_evidence(
             box = await locator.bounding_box()
             if not box or box["width"] < 20 or box["height"] < 20:
                 continue
-            safe_id = hashlib.sha1(f"{candidate.get('frame_index', 0)}:{selector}".encode("utf-8")).hexdigest()[:12]
-            screenshot_path = evidence_dir / f"candidate_{index:03d}_{safe_id}.png"
-            await locator.screenshot(path=str(screenshot_path), animations="disabled")
             candidate_images = list(candidate.get("image_urls") or [])
             candidate_videos = list(candidate.get("video_urls") or [])
             candidate_audio = list(candidate.get("audio_urls") or [])
             candidate_posters = list(candidate.get("video_posters") or [])
             asset_urls.extend(candidate_images + candidate_videos + candidate_audio + candidate_posters)
-            results.append({
+            item: dict[str, Any] = {
                 "candidate_index": index, "frame_index": candidate.get("frame_index", 0), "frame_url": candidate.get("frame_url"),
                 "selector": selector, "tag": candidate.get("tag"), "id": candidate.get("id"), "class_name": candidate.get("class_name"),
                 "aria_label": candidate.get("aria_label"), "role": candidate.get("role"), "title": candidate.get("title"),
@@ -68,8 +72,13 @@ async def capture_dom_ad_evidence(
                 "hrefs": candidate.get("hrefs", []), "image_urls": candidate_images, "video_urls": candidate_videos,
                 "audio_urls": candidate_audio, "video_posters": candidate_posters,
                 "bbox": {"x": round(box["x"]), "y": round(box["y"]), "width": round(box["width"]), "height": round(box["height"])},
-                "screenshot": str(screenshot_path),
-            })
+            }
+            if retain_screenshots:
+                safe_id = hashlib.sha1(f"{candidate.get('frame_index', 0)}:{selector}".encode("utf-8")).hexdigest()[:12]
+                screenshot_path = evidence_dir / f"candidate_{index:03d}_{safe_id}.png"
+                await locator.screenshot(path=str(screenshot_path), animations="disabled")
+                item["screenshot"] = str(screenshot_path)
+            results.append(item)
         except Exception as exc:
             results.append({"candidate_index": index, "frame_index": candidate.get("frame_index", 0), "frame_url": candidate.get("frame_url"), "selector": selector, "error": str(exc)})
 
@@ -78,7 +87,7 @@ async def capture_dom_ad_evidence(
     for item in results:
         urls = [*(item.get("image_urls") or []), *(item.get("video_urls") or []), *(item.get("audio_urls") or []), *(item.get("video_posters") or [])]
         item["creative_assets"] = [asset_by_url[url] for url in urls if url in asset_by_url]
-        if analyze_visuals and item.get("screenshot"):
+        if analyze_visuals and retain_screenshots and item.get("screenshot"):
             item.update(classify_visual_evidence(item["screenshot"], item.get("bbox"), item.get("creative_assets")))
 
     (run_dir / "creative_assets.json").write_text(json.dumps(assets, indent=2), encoding="utf-8")
