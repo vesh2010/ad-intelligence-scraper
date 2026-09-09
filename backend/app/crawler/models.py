@@ -28,6 +28,10 @@ class CrawlRequest(BaseModel):
     enrich_landing_pages: bool = False
     max_landing_destinations: int = Field(default=25, ge=1, le=25)
     device: Literal["desktop", "mobile"] = "desktop"
+    handle_consent: bool = True
+    keep_evidence: bool = True
+    scroll_page: bool = True
+    capture_runtime_snapshots: bool = True
 
     @field_validator("url", mode="before")
     @classmethod
@@ -61,6 +65,10 @@ class CrawlResult(BaseModel):
     section: str = "home"
     page_type: str = "other"
     discovery_method: str = "homepage"
+    consent_detected: bool = False
+    consent_clicked: bool = False
+    consent_selector: str | None = None
+    consent_error: str | None = None
 
 
 class SiteCrawlRequest(BaseModel):
