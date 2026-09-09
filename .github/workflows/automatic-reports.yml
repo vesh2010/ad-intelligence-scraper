@@ -106,6 +106,15 @@ jobs:
             fi
             sleep 10
           done
+      - name: Remove temporary screenshot evidence
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -d data/runs ]; then
+            find data/runs -name screenshot.png -type f -delete
+            find data/runs -name trace.zip -type f -delete
+            find data/runs -type d -name ad_candidates -prune -exec rm -rf {} +
+          fi
       - name: Verify report outputs
         shell: bash
         run: |
