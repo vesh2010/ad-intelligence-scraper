@@ -10,13 +10,6 @@ from ..ad_records import AdRecord
 
 
 def _prefer_https(value: object) -> object:
-    """Prefer HTTPS for public hostnames when callers supply an HTTP URL.
-
-    Some CDN/WAF front doors reject plain HTTP before issuing their normal
-    redirect. This makes a crawl fail with an empty page even though the same
-    public site is reachable over HTTPS. Local/private HTTP targets remain
-    untouched so development and internal test fixtures continue to work.
-    """
     if not isinstance(value, str):
         return value
     parsed = urlsplit(value)
@@ -28,12 +21,12 @@ def _prefer_https(value: object) -> object:
 
 class CrawlRequest(BaseModel):
     url: HttpUrl
-    wait_ms: int = Field(default=2000, ge=0, le=30000)
-    timeout_ms: int = Field(default=30000, ge=1000, le=120000)
+    wait_ms: int = Field(default=2500, ge=0, le=30000)
+    timeout_ms: int = Field(default=60000, ge=1000, le=120000)
     trace: bool = True
     include_ads_txt: bool = True
     enrich_landing_pages: bool = False
-    max_landing_destinations: int = Field(default=10, ge=1, le=25)
+    max_landing_destinations: int = Field(default=25, ge=1, le=25)
     device: Literal["desktop", "mobile"] = "desktop"
 
     @field_validator("url", mode="before")
@@ -64,16 +57,27 @@ class CrawlResult(BaseModel):
     ad_records: list[AdRecord] = Field(default_factory=list)
     ads_txt: dict[str, Any] | None = None
     device: Literal["desktop", "mobile"] = "desktop"
+    depth: int = 0
+    section: str = "home"
+    page_type: str = "other"
+    discovery_method: str = "homepage"
 
 
 class SiteCrawlRequest(BaseModel):
     url: HttpUrl
-    max_pages: int = Field(default=10, ge=1, le=100)
-    max_depth: int = Field(default=2, ge=0, le=10)
-    wait_ms: int = Field(default=1500, ge=0, le=30000)
-    timeout_ms: int = Field(default=30000, ge=1000, le=120000)
-    enrich_landing_pages: bool = False
-    max_landing_destinations: int = Field(default=10, ge=1, le=25)
+    max_pages: int = Field(default=200, ge=1, le=500)
+    max_depth: int = Field(default=5, ge=0, le=10)
+    max_discovered_urls: int = Field(default=5000, ge=1, le=20000)
+    wait_ms: int = Field(default=2500, ge=0, le=30000)
+    timeout_ms: int = Field(default=60000, ge=1000, le=120000)
+    enrich_landing_pages: bool = True
+    max_landing_destinations: int = Field(default=25, ge=1, le=25)
+    discover_sitemap: bool = True
+    handle_consent: bool = True
+    keep_evidence: bool = True
+    scroll_page: bool = True
+    capture_runtime_snapshots: bool = True
+    allow_subdomains: bool = True
 
     @field_validator("url", mode="before")
     @classmethod
@@ -85,10 +89,13 @@ class SiteCrawlResult(BaseModel):
     root_url: str
     max_pages: int
     max_depth: int
+    max_discovered_urls: int
     pages_crawled: int
     pages_failed: int
     pages_discovered: int
     ads_detected: int
     normalized_ad_records: int
+    manifest: list[dict[str, object]] = Field(default_factory=list)
+    discovery: dict[str, object] = Field(default_factory=dict)
     pages: list[CrawlResult]
     failures: list[dict[str, str]]
