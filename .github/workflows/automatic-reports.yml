@@ -7,12 +7,17 @@ on:
     - cron: '30 3 * * *'
   workflow_dispatch:
 
+concurrency:
+  group: automatic-13-site-reports
+  cancel-in-progress: true
+
 env:
   MAX_PAGES: '5'
   MAX_DEPTH: '5'
   MAX_DISCOVERED_URLS: '1000'
   BOTH_DEVICES: 'true'
-  MAX_RUNTIME_MINUTES: '12'
+  MAX_RUNTIME_MINUTES: '10'
+  AD_SCRAPER_RETAIN_SCREENSHOTS: 'false'
   PYTHONPATH: backend
 
 jobs:
@@ -49,7 +54,7 @@ jobs:
           - key: abp-news
             site_url: https://abplive.com/
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 13
     env:
       SITE_URL: ${{ matrix.site_url }}
       REPORT_KEY: ${{ matrix.key }}
@@ -79,6 +84,7 @@ jobs:
           assert int(os.environ['MAX_DEPTH']) == 5
           assert int(os.environ['MAX_DISCOVERED_URLS']) == 1000
           assert os.environ['BOTH_DEVICES'].lower() == 'true'
+          assert os.environ['AD_SCRAPER_RETAIN_SCREENSHOTS'].lower() == 'false'
           PY
       - name: Run bounded site-wide crawl with retries and watchdog
         shell: bash
@@ -142,6 +148,7 @@ jobs:
           echo "Maximum crawl depth: $MAX_DEPTH" >> "$GITHUB_STEP_SUMMARY"
           echo "Maximum discovered URLs: $MAX_DISCOVERED_URLS" >> "$GITHUB_STEP_SUMMARY"
           echo "Desktop + mobile: $BOTH_DEVICES" >> "$GITHUB_STEP_SUMMARY"
+          echo "Site watchdog: ${MAX_RUNTIME_MINUTES} minutes per attempt" >> "$GITHUB_STEP_SUMMARY"
           echo 'Screenshots/candidate screenshot files are not retained in the automatic report artifact.' >> "$GITHUB_STEP_SUMMARY"
 
   comparison:
