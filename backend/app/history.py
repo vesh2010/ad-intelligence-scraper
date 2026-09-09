@@ -40,7 +40,7 @@ def creative_fingerprint(record: AdRecord) -> str:
 
 
 def build_snapshot(records: list[AdRecord], observed_at: str) -> list[dict[str, Any]]:
-    """Create compact historical observations suitable for a later database."""
+    """Create compact historical observations while retaining reportable evidence links."""
     snapshot: list[dict[str, Any]] = []
     for record in records:
         snapshot.append(
@@ -51,20 +51,33 @@ def build_snapshot(records: list[AdRecord], observed_at: str) -> list[dict[str, 
                 "brand_name": record.brand_name,
                 "advertiser_name": record.advertiser_name,
                 "product_name": record.product_name,
+                "headline": record.headline,
+                "call_to_action": record.call_to_action,
                 "ad_type": record.ad_type,
                 "ad_format": record.ad_format,
                 "ad_unit_code": record.ad_unit_code,
+                "element_id": record.element_id,
                 "device": getattr(record, "device", None),
                 "bidder": record.bidder,
                 "network_name": record.network_name,
+                "ad_server": record.ad_server,
                 "cpm": record.cpm,
                 "currency": record.currency,
                 "destination_urls": record.destination_urls,
                 "creative_image_urls": record.creative_image_urls,
                 "creative_video_urls": record.creative_video_urls,
-                "creative_fingerprint": creative_fingerprint(record),
+                "creative_audio_urls": record.creative_audio_urls,
+                "creative_assets": record.creative_assets,
+                "landing_page": record.landing_page,
+                "screenshot": record.screenshot,
+                "placement": record.placement,
                 "above_fold": record.above_fold,
+                "evidence": record.evidence,
+                "request_resolution": record.request_resolution,
                 "confidence": record.confidence,
+                "ocr_text": record.ocr_text,
+                "visual_classification": record.visual_classification,
+                "creative_fingerprint": creative_fingerprint(record),
             }
         )
     return snapshot
@@ -84,5 +97,5 @@ def append_snapshot(history_file: str | Path, records: list[AdRecord], observed_
             existing = []
     additions = build_snapshot(records, observed_at)
     existing.extend(additions)
-    path.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+    path.write_text(json.dumps(existing, indent=2, default=str), encoding="utf-8")
     return {"observations": len(additions), "history_size": len(existing)}
