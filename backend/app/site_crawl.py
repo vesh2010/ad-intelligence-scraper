@@ -36,7 +36,10 @@ async def crawl_site(
     timeout_ms: int = 30000,
     enrich_landing_pages: bool = False,
     max_landing_destinations: int = 10,
+    device: str = "desktop",
 ) -> dict[str, Any]:
+    if device not in {"desktop", "mobile"}:
+        raise ValueError("device must be desktop or mobile")
     queue = URLQueue(root_url, max_pages=max_pages)
     pages: list[CrawlResult] = []
     failures: list[dict[str, str]] = []
@@ -56,6 +59,7 @@ async def crawl_site(
                     include_ads_txt=(depth == 0),
                     enrich_landing_pages=enrich_landing_pages,
                     max_landing_destinations=max_landing_destinations,
+                    device=device,
                 )
             )
             pages.append(result)
@@ -75,6 +79,7 @@ async def crawl_site(
         "root_url": queue.root_url,
         "max_pages": max_pages,
         "max_depth": max_depth,
+        "device": device,
         "pages_crawled": len(pages),
         "pages_failed": len(failures),
         "pages_discovered": queue.seen_count,
