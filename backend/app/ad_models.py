@@ -19,7 +19,13 @@ class AdSignal(BaseModel):
     aria_label: str | None = None
     role: str | None = None
     title: str | None = None
+    alt: str | None = None
     text: str | None = None
+    advertiser_name: str | None = None
+    brand_name: str | None = None
+    product_name: str | None = None
+    headline: str | None = None
+    call_to_action: str | None = None
     width: int | None = None
     height: int | None = None
     x: int | None = None
@@ -27,9 +33,12 @@ class AdSignal(BaseModel):
     viewport_x: int | None = None
     viewport_y: int | None = None
     iframe_src: str | None = None
+    src: str | None = None
     hrefs: list[str] = Field(default_factory=list)
     image_urls: list[str] = Field(default_factory=list)
     video_urls: list[str] = Field(default_factory=list)
+    audio_urls: list[str] = Field(default_factory=list)
+    video_posters: list[str] = Field(default_factory=list)
     position_mode: str | None = None
     z_index: str | None = None
     dataset: dict[str, str] = Field(default_factory=dict)
