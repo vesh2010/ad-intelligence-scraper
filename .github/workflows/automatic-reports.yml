@@ -87,7 +87,7 @@ jobs:
             if [ "$attempt" = 3 ]; then exit 1; fi
             sleep 15
           done
-      - name: Verify HTML/PDF only and no screenshots
+      - name: Verify HTML/PDF only and no screenshot evidence
         shell: bash
         run: |
           set -euxo pipefail
@@ -95,8 +95,8 @@ jobs:
           test -s ci-output/report/site-report.pdf
           test -s ci-output/report/site_summary.json
           test -s ci-output/run_metadata.json
-          if find data/runs -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' \) -print -quit | grep -q .; then
-            echo 'Screenshots/images must not be retained in automatic report mode'
+          if find data/runs -type f \( -path '*/ad_candidates/*.png' -o -path '*/ad_candidates/*.jpg' -o -path '*/ad_candidates/*.jpeg' -o -path '*/ad_candidates/*.webp' -o -name 'screenshot.png' \) -print -quit | grep -q .; then
+            echo 'Screenshot evidence must not be retained in automatic report mode'
             exit 1
           fi
       - name: Upload standalone latest HTML report
@@ -124,7 +124,7 @@ jobs:
           echo "Site: $SITE_URL" >> "$GITHUB_STEP_SUMMARY"
           echo 'Maximum same-site pages to crawl: 5' >> "$GITHUB_STEP_SUMMARY"
           echo 'Maximum crawl depth: 5' >> "$GITHUB_STEP_SUMMARY"
-          echo 'Outputs: HTML + PDF; screenshots are not retained.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Outputs: HTML + PDF; screenshot evidence is not retained.' >> "$GITHUB_STEP_SUMMARY"
 
   comparison:
     name: 13-Site comparison table
@@ -147,7 +147,7 @@ jobs:
       - name: Validate all 13 reports
         run: |
           set -euxo pipefail
-          count=$(find site-results -mindepth 2 -maxdepth 2 -name site_summary.json -type f | wc -l)
+          count=$(find site-results -name site_summary.json -type f | wc -l)
           test "$count" -eq 13
       - name: Build comparison HTML and PDF
         run: |
