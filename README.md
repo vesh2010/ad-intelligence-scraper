@@ -1,10 +1,43 @@
 # Ad Intelligence Scraper
 
-A browser-based web ad intelligence collector. The pipeline is built incrementally so every stage leaves inspectable evidence for later analysis rather than guessing advertiser identity.
+A browser-based web ad intelligence collector. The pipeline is evidence-first: every stage leaves inspectable evidence for later analysis rather than guessing advertiser identity.
 
-## v1.0.0 status
+## Site-wide crawl architecture
 
-The v1.0.0 implementation is complete for the defined evidence-first scope. GitHub Actions gates the Python/browser regression suite, Docker runtime smoke test, and Windows portable application build. The system is production-oriented, but live publisher behavior remains inherently variable and must be interpreted from evidence.
+Site crawl now uses a bounded **discover → classify → crawl → capture → reconcile → report** pipeline.
+
+Default production controls:
+
+```text
+MAX_DEPTH=5
+MAX_PAGES=200
+MAX_DISCOVERED_URLS=5000
+MAX_RUNTIME_MINUTES=25
+BOTH_DEVICES=true
+WAIT_MS=2500
+TIMEOUT_MS=60000
+ENRICH_LANDING_PAGES=true
+MAX_LANDING_DESTINATIONS=25
+DISCOVER_SITEMAP=true
+HANDLE_CONSENT=true
+KEEP_EVIDENCE=true
+SCROLL_PAGE=true
+CAPTURE_RUNTIME_SNAPSHOTS=true
+```
+
+Discovery checks `robots.txt`, sitemap indexes, `sitemap.xml`, rendered page links, canonical/next/prev links, iframes and JSON-LD URLs. Discovered URLs are normalized, deduplicated, bounded and classified into homepage, section/category/topic, article, video, gallery, author, tag, search, pagination or other.
+
+Every crawl writes a manifest with URL, source, discovery method, depth, section, page type, status, HTTP status, device coverage, ad signal count and normalized ad count. The report distinguishes pages that had no observed ad from pages that were never crawled or failed.
+
+Ad capture is multi-stage: DOMContentLoaded, post-wait, network-idle/timeout, consent handling, 25/50/75/100% scroll checkpoints and final state. Runtime, network, DOM, iframe and visual evidence are reconciled into normalized records. Public landing destinations can be enriched with bounded redirect validation and metadata extraction.
+
+Evidence retention is enabled for site investigations. This includes page HTML, screenshots, network/runtime JSON, visual evidence, candidate captures, creative assets, trace data and landing-page metadata when available.
+
+## Automatic 13-site reports
+
+GitHub Actions runs the configured publisher set automatically on push, daily, or manually. The automatic job uses a bounded 50-page-per-device CI profile, depth 5, up to 5,000 discovered URLs and desktop + mobile coverage. Each site produces HTML + PDF plus its crawl manifest and retained evidence package. A second job builds the 13-site comparison HTML + PDF table.
+
+The configured publishers are NDTV, News18, The Indian Express, Times of India, Zee News, Economic Times, Moneycontrol, Business Standard, Navbharat Times, Dainik Jagran, Aaj Tak, News18 Hindi and ABP News.
 
 ## What you use it for
 
@@ -75,7 +108,7 @@ For API users, call `POST /api/crawl/both-devices`. The result contains desktop/
 
 ### 3. Site investigation
 
-Enable **Site crawl** and choose a bounded page/depth limit. Use this for a small publisher section rather than an entire large site.
+Enable **Site crawl** and choose a bounded page/depth limit. Site reports include crawl coverage, section/page-type coverage, the complete manifest, ad inventory, missing-data analysis and errors.
 
 ### 4. Repeated monitoring
 
@@ -92,7 +125,7 @@ Alerts can cover campaign appearance/disappearance, creative changes, placement/
 
 ### 5. Reports
 
-Use run reports for a single crawl, historical reports for repeated monitoring data, and site reports for bounded multi-page investigations. Reports include campaign intelligence, competitor/brand frequency, device intelligence, historical changes and advertiser/creative evidence.
+Use run reports for a single crawl, historical reports for repeated monitoring data, and site reports for bounded multi-page investigations. Reports include campaign intelligence, competitor/brand frequency, device intelligence, historical changes, crawl coverage and advertiser/creative evidence.
 
 Competitor frequency is the share of **observed ad records**, not market share.
 
@@ -118,70 +151,4 @@ For the Windows portable build, run the same script only when using a Python che
 
 ## Security / deployment guidance
 
-The default deployments are localhost-only because the API has no built-in user authentication. Do not expose it directly to the public internet. For remote access, use an authenticated reverse proxy/VPN/SSH tunnel.
-
-## Current scope
-
-- Playwright Chromium crawl with desktop/mobile device profiles
-- rendered HTML and full-page screenshot
-- redirect, frame, image, script and link inventory
-- browser network request/response inventory
-- console and page-error capture
-- Playwright trace
-- conservative DOM ad-candidate detection
-- Google Publisher Tag runtime extraction
-- Prebid.js runtime extraction
-- explicit ad-server/exchange request resolution to GPT/Prebid slots when IDs match
-- normalized ad records with advertiser/brand/bid metadata when the publisher exposes it
-- DOM candidate screenshots, geometry and visual evidence
-- bounded local OCR and visual classification
-- discoverable image, video and audio creative asset capture with SSRF/size limits
-- optional FFprobe media metadata inspection
-- public `ads.txt` retrieval and parsing
-- landing-page enrichment with SSRF protections and bounded destinations
-- stable campaign identity and creative fingerprints
-- historical change detection for campaigns, creative additions/removals/changes, placements, devices, networks and normalized CPM
-- desktop/mobile campaign comparison
-- campaign and competitor/brand frequency intelligence
-- bounded same-site crawling
-- SQLite-backed history, monitor targets and alerts with legacy JSON migration
-- scheduled monitor execution with per-monitor isolation and failure status
-- FastAPI API plus a built-in inspection UI
-- self-contained HTML and vector PDF intelligence reports
-- Docker build/runtime health and smoke testing
-- Windows single-file portable executable with bundled browser/runtime dependencies
-
-## API reference
-
-Open `/docs` while the service is running for interactive Swagger documentation. Core endpoints include `/api/crawl`, `/api/crawl/both-devices`, `/api/site-crawl`, `/api/monitors`, `/api/history`, and `/api/runs/{run_id}/...`.
-
-## Testing
-
-```bash
-cd backend
-pytest -q
-```
-
-CI validates Python/browser behavior, Docker startup, and the Windows portable executable's startup, `/api/health` and `/docs` endpoints.
-
-## Acceptance status
-
-- Core crawl and ad evidence: complete
-- GPT/Prebid/network resolution: complete
-- Evidence-backed advertiser identity: complete
-- Creative/OCR/media capture: complete within documented bounds
-- Desktop/mobile comparison: complete
-- Historical change intelligence: complete
-- SQLite persistence and monitor isolation: complete
-- Scheduled monitoring and alerts: complete
-- HTML/PDF/report intelligence: complete
-- Site-crawl reporting: complete
-- API and artifact security validation: complete
-- Docker production packaging and smoke test: complete
-- Backup utility and operator runbook: complete
-- Windows single-file portable application: complete, with automated startup smoke test
-- Automated regression CI: release gates enabled
-
-## Live-site limitation
-
-External publisher pages can change their ad stack, inventory and consent behavior at any time. This environment cannot honestly guarantee a live publisher crawl from ChatGPT because external DNS access is unavailable here. Automated acceptance therefore relies on browser regression, deterministic report tests, Docker runtime checks and the Windows executable smoke test. When a live publisher crawl is performed in an environment with network access, advertiser identity should still be reported as unknown whenever the publisher does not expose sufficient evidence.
+The scraper keeps publisher pages and third-party ad destinations separate. External domains are recorded as ad destinations, ad servers, landing pages or network evidence; they are not promoted to normal site pages unless the crawl configuration explicitly permits them.
