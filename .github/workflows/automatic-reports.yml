@@ -8,11 +8,11 @@ on:
   workflow_dispatch:
 
 env:
-  MAX_PAGES: '50'
+  MAX_PAGES: '5'
   MAX_DEPTH: '5'
-  MAX_DISCOVERED_URLS: '5000'
+  MAX_DISCOVERED_URLS: '1000'
   BOTH_DEVICES: 'true'
-  MAX_RUNTIME_MINUTES: '25'
+  MAX_RUNTIME_MINUTES: '12'
   PYTHONPATH: backend
 
 jobs:
@@ -49,7 +49,7 @@ jobs:
           - key: abp-news
             site_url: https://abplive.com/
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 15
     env:
       SITE_URL: ${{ matrix.site_url }}
       REPORT_KEY: ${{ matrix.key }}
@@ -75,23 +75,32 @@ jobs:
           p = urlparse(os.environ['SITE_URL'])
           if p.scheme != 'https' or not p.netloc:
               raise SystemExit('Publisher URL must be HTTPS')
-          assert int(os.environ['MAX_PAGES']) == 50
+          assert int(os.environ['MAX_PAGES']) == 5
           assert int(os.environ['MAX_DEPTH']) == 5
-          assert int(os.environ['MAX_DISCOVERED_URLS']) == 5000
+          assert int(os.environ['MAX_DISCOVERED_URLS']) == 1000
           assert os.environ['BOTH_DEVICES'].lower() == 'true'
           PY
-      - name: Run site-wide crawl with retries
+      - name: Run bounded site-wide crawl with retries and watchdog
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
           for attempt in 1 2 3; do
-            echo "${REPORT_KEY}: crawl attempt $attempt/3"
+            echo "${REPORT_KEY}: scrape attempt $attempt/3"
             rm -rf ci-output data/runs
-            if python scripts/ci_site_scrape.py; then break; fi
-            if [ "$attempt" = 3 ]; then exit 1; fi
-            sleep 15
+            if timeout --signal=TERM --kill-after=30s "${MAX_RUNTIME_MINUTES}m" python scripts/ci_site_scrape.py; then
+              echo "${REPORT_KEY}: scrape attempt $attempt completed"
+              break
+            else
+              rc=$?
+              echo "${REPORT_KEY}: scrape attempt $attempt stopped with exit code $rc"
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "${REPORT_KEY}: all 3 bounded attempts failed"
+              exit 1
+            fi
+            sleep 10
           done
-      - name: Verify report and evidence coverage
+      - name: Verify report outputs
         shell: bash
         run: |
           set -euxo pipefail
@@ -102,7 +111,8 @@ jobs:
           test -s ci-output/run_metadata.json
           test -s ci-output/crawl_results.json
           test "$(find data/runs -name result.json -type f | wc -l)" -gt 0
-          test "$(find data/runs -name screenshot.png -type f | wc -l)" -gt 0
+          test "$(find data/runs -name screenshot.png -type f | wc -l)" -eq 0
+          test "$(find data/runs -path '*/ad_candidates/*.png' -o -path '*/ad_candidates/*.jpg' -o -path '*/ad_candidates/*.jpeg' -o -path '*/ad_candidates/*.webp' | wc -l)" -eq 0
       - name: Upload standalone latest HTML report
         uses: actions/upload-artifact@v4
         with:
@@ -110,7 +120,7 @@ jobs:
           path: ci-output/report/site-report.html
           if-no-files-found: error
           retention-days: 30
-      - name: Upload site report and evidence package
+      - name: Upload site report package
         uses: actions/upload-artifact@v4
         with:
           name: site-report-${{ matrix.key }}
@@ -121,7 +131,6 @@ jobs:
             ci-output/report/crawl_manifest.json
             ci-output/run_metadata.json
             ci-output/crawl_results.json
-            data/runs/**
           if-no-files-found: error
           retention-days: 30
       - name: Summary
@@ -129,11 +138,11 @@ jobs:
         run: |
           echo "## ${REPORT_KEY}" >> "$GITHUB_STEP_SUMMARY"
           echo "Site: $SITE_URL" >> "$GITHUB_STEP_SUMMARY"
-          echo "Maximum pages: $MAX_PAGES" >> "$GITHUB_STEP_SUMMARY"
+          echo "Maximum same-site pages per device: $MAX_PAGES" >> "$GITHUB_STEP_SUMMARY"
           echo "Maximum crawl depth: $MAX_DEPTH" >> "$GITHUB_STEP_SUMMARY"
           echo "Maximum discovered URLs: $MAX_DISCOVERED_URLS" >> "$GITHUB_STEP_SUMMARY"
           echo "Desktop + mobile: $BOTH_DEVICES" >> "$GITHUB_STEP_SUMMARY"
-          echo 'Evidence, including screenshots and candidate captures, is retained.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Screenshots/candidate screenshot files are not retained in the automatic report artifact.' >> "$GITHUB_STEP_SUMMARY"
 
   comparison:
     name: 13-Site comparison table
@@ -164,6 +173,7 @@ jobs:
           test -s comparison/comparison.html
           test -s comparison/comparison.pdf
           grep -q '13-Site Ad Intelligence Comparison' comparison/comparison.html
+          grep -q 'Maximum pages per device = 5' comparison/comparison.html
           grep -q 'Maximum crawl depth = 5' comparison/comparison.html
       - name: Upload comparison HTML
         uses: actions/upload-artifact@v4
@@ -182,5 +192,5 @@ jobs:
       - name: Summary
         run: |
           echo '## 13-Site Comparison' >> "$GITHUB_STEP_SUMMARY"
-          echo 'All 13 configured publishers are compared using the same crawl controls.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'All 13 configured publishers are compared using the same bounded crawl controls.' >> "$GITHUB_STEP_SUMMARY"
           echo 'Comparison table available as HTML and PDF.' >> "$GITHUB_STEP_SUMMARY"
