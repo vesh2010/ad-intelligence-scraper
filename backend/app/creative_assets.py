@@ -11,9 +11,9 @@ import httpx
 from .media_intelligence import inspect_media
 
 
-MAX_ASSET_BYTES = 4_000_000
-MAX_TOTAL_BYTES = 20_000_000
-DEFAULT_MAX_ASSETS = 30
+MAX_ASSET_BYTES = 8_000_000
+MAX_TOTAL_BYTES = 80_000_000
+DEFAULT_MAX_ASSETS = 100
 _ALLOWED_PREFIXES = ("image/", "video/", "audio/")
 
 
@@ -36,12 +36,7 @@ async def _resolves_public(url: str) -> bool:
     if not parsed.hostname:
         return False
     try:
-        infos = await __import__("asyncio").to_thread(
-            socket.getaddrinfo,
-            parsed.hostname,
-            parsed.port or (443 if parsed.scheme == "https" else 80),
-            type=socket.SOCK_STREAM,
-        )
+        infos = await __import__("asyncio").to_thread(socket.getaddrinfo, parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM)
     except OSError:
         return False
     addresses = {info[4][0] for info in infos if info and info[4]}
@@ -75,14 +70,11 @@ def _extension(content_type: str, url: str) -> str:
 
 
 async def capture_creative_assets(
-    asset_urls: list[str],
-    output_dir: str | Path,
-    max_assets: int = DEFAULT_MAX_ASSETS,
-    max_asset_bytes: int = MAX_ASSET_BYTES,
-    max_total_bytes: int = MAX_TOTAL_BYTES,
-    timeout_s: float = 8.0,
+    asset_urls: list[str], output_dir: str | Path,
+    max_assets: int = DEFAULT_MAX_ASSETS, max_asset_bytes: int = MAX_ASSET_BYTES,
+    max_total_bytes: int = MAX_TOTAL_BYTES, timeout_s: float = 8.0,
 ) -> list[dict[str, object]]:
-    """Download bounded public image/video/audio creative assets and inspect media streams."""
+    """Download a large bounded set of public creative assets and inspect media."""
     unique: list[str] = []
     seen: set[str] = set()
     for url in asset_urls:
@@ -99,11 +91,7 @@ async def capture_creative_assets(
     results: list[dict[str, object]] = []
     total = 0
 
-    async with httpx.AsyncClient(
-        follow_redirects=False,
-        timeout=timeout_s,
-        headers={"User-Agent": "AdIntelligenceScraper/0.1 (+creative asset research)"},
-    ) as client:
+    async with httpx.AsyncClient(follow_redirects=False, timeout=timeout_s, headers={"User-Agent": "AdIntelligenceScraper/0.1 (+creative asset research)"}) as client:
         for url in unique:
             try:
                 current = url
@@ -122,7 +110,6 @@ async def capture_creative_assets(
                     raise ValueError("no response")
                 if not response.is_success:
                     raise ValueError(f"HTTP {response.status_code}")
-
                 content_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
                 if not any(content_type.startswith(prefix) for prefix in _ALLOWED_PREFIXES):
                     raise ValueError(f"unsupported content type: {content_type or 'unknown'}")
@@ -135,22 +122,15 @@ async def capture_creative_assets(
                 if total + len(body) > max_total_bytes:
                     results.append({"url": url, "error": "total asset budget exhausted"})
                     break
-
                 digest = hashlib.sha256(body).hexdigest()
-                filename = f"{digest[:20]}{_extension(content_type, current)}"
-                path = asset_dir / filename
+                path = asset_dir / f"{digest[:20]}{_extension(content_type, current)}"
                 if not path.exists():
                     path.write_bytes(body)
                 total += len(body)
-                item: dict[str, object] = {
-                    "url": url, "final_url": current, "mime_type": content_type,
-                    "asset_kind": content_type.split("/", 1)[0], "bytes": len(body),
-                    "sha256": digest, "path": str(path),
-                }
+                item: dict[str, object] = {"url": url, "final_url": current, "mime_type": content_type, "asset_kind": content_type.split("/", 1)[0], "bytes": len(body), "sha256": digest, "path": str(path)}
                 if content_type.startswith(("video/", "audio/")):
                     item["media"] = inspect_media(path)
                 results.append(item)
             except (httpx.HTTPError, ValueError, OSError) as exc:
                 results.append({"url": url, "error": str(exc)})
-
     return results
