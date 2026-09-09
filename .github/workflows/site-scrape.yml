@@ -85,6 +85,14 @@ jobs:
           test -s ci-output/scrape_result.json
           test -s ci-output/run_metadata.json
           test -s ci-output/report/index.html
+          html=$(find data/runs -name report.html -type f -print -quit)
+          pdf=$(find data/runs -name report.pdf -type f -print -quit)
+          test -n "$html"
+          test -n "$pdf"
+          test -s "$html"
+          test -s "$pdf"
+          cp "$html" ci-output/latest-report.html
+          cp "$pdf" ci-output/latest-report.pdf
           result_count=$(find data/runs -name result.json -type f | wc -l)
           html_count=$(find data/runs -name report.html -type f | wc -l)
           pdf_count=$(find data/runs -name report.pdf -type f | wc -l)
@@ -105,17 +113,24 @@ jobs:
               raise SystemExit('run_metadata.json has no run_ids')
           print('Verified report runs:', ', '.join(metadata['run_ids']))
           PY
+      - name: Upload standalone latest HTML report
+        uses: actions/upload-artifact@v4
+        with:
+          name: latest-html-report-${{ github.run_id }}
+          path: ci-output/latest-report.html
+          if-no-files-found: error
+          retention-days: 30
       - name: Upload complete scrape artifact
         uses: actions/upload-artifact@v4
         with:
           name: ad-intelligence-scrape-${{ github.run_id }}
           path: ci-output/
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
       - name: Job summary
         if: always()
         run: |
           echo '## Ad Intelligence Scrape' >> "$GITHUB_STEP_SUMMARY"
           echo "Site: $SITE_URL" >> "$GITHUB_STEP_SUMMARY"
           echo "Pages: $MAX_PAGES | Depth: $MAX_DEPTH | Desktop + mobile: $BOTH_DEVICES" >> "$GITHUB_STEP_SUMMARY"
-          echo 'Complete scrape report is available in the workflow artifact.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Standalone latest HTML report artifact was uploaded separately.' >> "$GITHUB_STEP_SUMMARY"
