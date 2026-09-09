@@ -23,12 +23,16 @@ def _num(value: Any) -> int:
         return 0
 
 
+def _find_one(root: Path, filename: str) -> Path:
+    matches = sorted(root.rglob(filename))
+    if not matches:
+        raise FileNotFoundError(f"{filename} not found under {root}")
+    return matches[0]
+
+
 def _site_summary(root: Path, key: str) -> dict[str, Any]:
-    metadata = _read_json(root / "run_metadata.json")
-    summary_path = root / "site_summary.json"
-    if not summary_path.is_file():
-        raise FileNotFoundError(summary_path)
-    summary = _read_json(summary_path)
+    metadata = _read_json(_find_one(root, "run_metadata.json"))
+    summary = _read_json(_find_one(root, "site_summary.json"))
     devices = summary.get("devices", {})
     return {
         "key": key,
@@ -90,7 +94,7 @@ def main() -> None:
     args = parser.parse_args()
     root, output = Path(args.input), Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
-    summaries = [_site_summary(child, child.name) for child in sorted(root.iterdir()) if child.is_dir() and (child / "run_metadata.json").is_file()]
+    summaries = [_site_summary(child, child.name) for child in sorted(root.iterdir()) if child.is_dir()]
     if len(summaries) != 13:
         raise SystemExit(f"Expected 13 site reports, found {len(summaries)}")
     (output / "comparison.html").write_text(build_html(summaries), encoding="utf-8")
