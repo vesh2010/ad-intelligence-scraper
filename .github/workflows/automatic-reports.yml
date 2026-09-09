@@ -1,0 +1,176 @@
+name: Automatic 13-Site Ad Intelligence Reports
+
+on:
+  schedule:
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+
+env:
+  MAX_PAGES: '5'
+  MAX_DEPTH: '5'
+  BOTH_DEVICES: 'true'
+  PYTHONPATH: backend
+
+jobs:
+  site-reports:
+    name: Report — ${{ matrix.key }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - key: ndtv
+            site_url: https://ndtv.com/
+          - key: news18
+            site_url: https://news18.com/
+          - key: indian-express
+            site_url: https://indianexpress.com/
+          - key: times-of-india
+            site_url: https://timesofindia.indiatimes.com/
+          - key: zee-news
+            site_url: https://zeenews.india.com/
+          - key: economic-times
+            site_url: https://economictimes.indiatimes.com/
+          - key: moneycontrol
+            site_url: https://moneycontrol.com/
+          - key: business-standard
+            site_url: https://business-standard.com/
+          - key: navbharat-times
+            site_url: https://navbharattimes.indiatimes.com/
+          - key: dainik-jagran
+            site_url: https://jagran.com/
+          - key: aaj-tak
+            site_url: https://aajtak.in/
+          - key: news18-hindi
+            site_url: https://hindi.news18.com/
+          - key: abp-news
+            site_url: https://abplive.com/
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SITE_URL: ${{ matrix.site_url }}
+      REPORT_KEY: ${{ matrix.key }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install system tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr ffmpeg
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt
+          python -m playwright install --with-deps chromium
+      - name: Validate automatic settings
+        run: |
+          set -euxo pipefail
+          python -m compileall -q scripts backend/app
+          python - <<'PY'
+          import os
+          from urllib.parse import urlparse
+          p = urlparse(os.environ['SITE_URL'])
+          if p.scheme != 'https' or not p.netloc:
+              raise SystemExit('Publisher URL must be valid HTTPS')
+          assert int(os.environ['MAX_PAGES']) == 5
+          assert int(os.environ['MAX_DEPTH']) == 5
+          PY
+      - name: Run 5-page depth-5 scrape with retries
+        shell: bash
+        run: |
+          set -e
+          for attempt in 1 2 3; do
+            echo "${REPORT_KEY}: scrape attempt $attempt/3"
+            rm -rf ci-output data/runs
+            if python scripts/ci_site_scrape.py; then break; fi
+            if [ "$attempt" = 3 ]; then exit 1; fi
+            sleep 15
+          done
+      - name: Verify HTML/PDF only and no screenshots
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test -s ci-output/report/site-report.html
+          test -s ci-output/report/site-report.pdf
+          test -s ci-output/report/site_summary.json
+          test -s ci-output/run_metadata.json
+          if find data/runs -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' \) -print -quit | grep -q .; then
+            echo 'Screenshots/images must not be retained in automatic report mode'
+            exit 1
+          fi
+      - name: Upload latest HTML report separately
+        uses: actions/upload-artifact@v4
+        with:
+          name: latest-html-report-${{ matrix.key }}
+          path: ci-output/report/site-report.html
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload site HTML and PDF report
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-report-${{ matrix.key }}
+          path: |
+            ci-output/report/site-report.html
+            ci-output/report/site-report.pdf
+            ci-output/report/site_summary.json
+            ci-output/run_metadata.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Summary
+        if: always()
+        run: |
+          echo "## ${REPORT_KEY}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Site: $SITE_URL" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Maximum same-site pages to crawl: 5' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Maximum crawl depth: 5' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Outputs: site-report.html + site-report.pdf; screenshots are not retained.' >> "$GITHUB_STEP_SUMMARY"
+
+  comparison:
+    name: 13-Site comparison table
+    needs: site-reports
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install report dependencies
+        run: python -m pip install -r backend/requirements.txt
+      - name: Download 13 site report packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: site-report-*
+          path: site-results
+          merge-multiple: false
+      - name: Validate exactly 13 site reports
+        run: |
+          set -euxo pipefail
+          count=$(find site-results -mindepth 2 -maxdepth 2 -name site_summary.json -type f | wc -l)
+          test "$count" -eq 13
+      - name: Build comparison HTML and PDF
+        run: |
+          python scripts/build_multi_site_report.py --input site-results --output comparison
+          test -s comparison/comparison.html
+          test -s comparison/comparison.pdf
+          grep -q '13-Site Ad Intelligence Comparison' comparison/comparison.html
+          grep -q 'Maximum same-site pages to crawl = 5' comparison/comparison.html
+          grep -q 'Maximum crawl depth = 5' comparison/comparison.html
+      - name: Upload comparison HTML
+        uses: actions/upload-artifact@v4
+        with:
+          name: 13-site-comparison-html
+          path: comparison/comparison.html
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload comparison PDF
+        uses: actions/upload-artifact@v4
+        with:
+          name: 13-site-comparison-pdf
+          path: comparison/comparison.pdf
+          if-no-files-found: error
+          retention-days: 30
+      - name: Summary
+        run: |
+          echo '## 13-Site Comparison' >> "$GITHUB_STEP_SUMMARY"
+          echo 'All 13 sites: 5 pages, depth 5, desktop + mobile.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Comparison table available as HTML and PDF.' >> "$GITHUB_STEP_SUMMARY"
