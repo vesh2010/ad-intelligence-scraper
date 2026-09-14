@@ -30,6 +30,7 @@ async def crawl_site(
     scroll_page: bool = True,
     capture_runtime_snapshots: bool = True,
     allow_subdomains: bool = True,
+    trace: bool = False,
 ) -> dict[str, Any]:
     if device not in {"desktop", "mobile"}:
         raise ValueError("device must be desktop or mobile")
@@ -61,7 +62,7 @@ async def crawl_site(
                     url=url,
                     wait_ms=wait_ms,
                     timeout_ms=timeout_ms,
-                    trace=True,
+                    trace=trace,
                     include_ads_txt=(depth == 0),
                     enrich_landing_pages=enrich_landing_pages,
                     max_landing_destinations=max_landing_destinations,
@@ -79,61 +80,46 @@ async def crawl_site(
             result_path = result.artifacts.get("html")
             failed_status = bool(result.status and result.status >= 400)
             entry.update({
-                "status": "failed" if failed_status else "success",
-                "http_status": result.status,
-                "last_error": f"HTTP {result.status}" if failed_status else None,
+                "url": result.requested_url,
+                "normalized_url": result.final_url,
                 "depth": depth,
                 "section": result.section,
                 "page_type": result.page_type,
-                "desktop_checked": device == "desktop",
-                "mobile_checked": device == "mobile",
-                "ad_signal_count": len(result.ad_detection.signals) if result.ad_detection else 0,
+                "status": "failed" if failed_status else "success",
+                "http_status": result.status,
+                "ad_signal_count": len(result.ad_detection.signals),
                 "normalized_ad_count": len(result.ad_records),
-                "run_id": result.run_id,
+                "errors": [*result.console_errors, *result.page_errors],
+                "evidence_paths": list(result.artifacts.values()),
             })
-            pages.append(result)
             if failed_status:
-                failures.append({"url": url, "error": f"HTTP {result.status}", "depth": str(depth), "status": "failed"})
-            elif result_path and depth < max_depth:
-                try:
-                    html = open(result_path, "r", encoding="utf-8").read()
-                    discovered = extract_discovery_urls(result.final_url, html, queue.root_url, allow_subdomains)
-                    queue.add_links(result.final_url, discovered, depth)
-                except OSError as exc:
-                    entry["last_error"] = f"cannot read saved HTML: {exc}"
+                failures.append({"url": url, "error": f"HTTP {result.status}"})
+            else:
+                pages.append(result)
+            discovered = extract_discovery_urls(result, current_url=result.final_url, root_url=queue.root_url)
+            queue.add_many(discovered, depth=depth + 1, discovery_method="page_link")
         except Exception as exc:
-            entry.update({"status": "failed", "last_error": str(exc), "depth": depth})
-            failures.append({"url": url, "error": str(exc), "depth": str(depth), "status": "failed"})
+            entry.update({"status": "failed", "errors": [str(exc)]})
+            failures.append({"url": url, "error": str(exc)})
 
     manifest = list(queue.manifest.values())
-    crawled_urls = {page.requested_url for page in pages}
-    failed_urls = {failure["url"] for failure in failures}
-    for item in manifest:
-        if item.get("url") in failed_urls:
-            item["status"] = "failed"
-        elif item.get("url") in crawled_urls:
-            continue
-        elif item.get("status") == "discovered":
-            item["status"] = "queued_unvisited"
     return {
-        "root_url": queue.root_url,
-        "max_pages": max_pages,
-        "max_depth": max_depth,
-        "max_discovered_urls": max_discovered_urls,
+        "site_url": root_url,
         "device": device,
-        "pages_crawled": len(pages),
-        "pages_failed": len(failures),
-        "pages_discovered": queue.seen_count,
-        "ads_detected": sum(len(page.ad_detection.signals) if page.ad_detection else 0 for page in pages),
-        "normalized_ad_records": sum(len(page.ad_records) for page in pages),
-        "manifest": manifest,
-        "discovery": {
-            "sitemap_urls_discovered": sitemap_urls,
-            "sitemap_urls_crawled": [item["url"] for item in manifest if item.get("discovery_method") == "sitemap" and item.get("status") == "success"],
-            "sitemap_urls_skipped": sitemap_skipped,
-            "urls_found_only_in_sitemap": sorted(set(sitemap_urls) - {item["url"] for item in manifest if item.get("discovery_method") != "sitemap"}),
-            "urls_found_only_through_page_links": sorted(item["url"] for item in manifest if item.get("discovery_method") == "page_link" and item["url"] not in sitemap_urls),
+        "crawl_settings": {
+            "max_pages": max_pages, "max_depth": max_depth, "max_discovered_urls": max_discovered_urls,
+            "wait_ms": wait_ms, "timeout_ms": timeout_ms, "enrich_landing_pages": enrich_landing_pages,
+            "max_landing_destinations": max_landing_destinations, "discover_sitemap": discover_sitemap,
+            "handle_consent": handle_consent, "keep_evidence": keep_evidence, "scroll_page": scroll_page,
+            "capture_runtime_snapshots": capture_runtime_snapshots, "allow_subdomains": allow_subdomains, "trace": trace,
         },
-        "pages": [page.model_dump() for page in pages],
-        "failures": failures,
+        "pages_crawled": len(pages) + len(failures), "pages_successful": len(pages), "pages_failed": len(failures),
+        "pages_discovered": queue.discovered_count, "ads_detected": sum(len(p.ad_detection.signals) for p in pages),
+        "ads_normalized": sum(len(p.ad_records) for p in pages), "manifest": manifest,
+        "discovery": {
+            "sitemap_urls_discovered": sitemap_urls, "sitemap_urls_crawled": [], "sitemap_urls_skipped": sitemap_skipped,
+            "urls_found_only_in_sitemap": sorted(set(sitemap_urls) - {p.requested_url for p in pages}),
+            "urls_found_only_through_page_links": [],
+        },
+        "pages": [p.model_dump() for p in pages], "failures": failures,
     }
