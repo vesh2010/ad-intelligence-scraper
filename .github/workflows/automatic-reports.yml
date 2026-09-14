@@ -16,8 +16,13 @@ env:
   MAX_DEPTH: '5'
   MAX_DISCOVERED_URLS: '1000'
   BOTH_DEVICES: 'true'
-  MAX_RUNTIME_MINUTES: '10'
+  MAX_RUNTIME_MINUTES: '4'
+  WAIT_MS: '750'
+  TIMEOUT_MS: '30000'
+  MAX_LANDING_DESTINATIONS: '5'
   AD_SCRAPER_RETAIN_SCREENSHOTS: 'false'
+  AD_SCRAPER_TRACE: 'false'
+  AD_SCRAPER_RUNTIME_SNAPSHOTS: 'true'
   PYTHONPATH: backend
 
 jobs:
@@ -63,13 +68,21 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
       - name: Install system tools
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr ffmpeg
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-1.57.0
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
           python -m pip install -r backend/requirements.txt
-          python -m playwright install --with-deps chromium
+          if ! python -m playwright install chromium; then
+            python -m playwright install chromium
+          fi
       - name: Validate automatic settings
         run: |
           set -euxo pipefail
@@ -84,27 +97,31 @@ jobs:
           assert int(os.environ['MAX_DEPTH']) == 5
           assert int(os.environ['MAX_DISCOVERED_URLS']) == 1000
           assert os.environ['BOTH_DEVICES'].lower() == 'true'
+          assert int(os.environ['WAIT_MS']) == 750
+          assert int(os.environ['TIMEOUT_MS']) == 30000
+          assert int(os.environ['MAX_LANDING_DESTINATIONS']) == 5
           assert os.environ['AD_SCRAPER_RETAIN_SCREENSHOTS'].lower() == 'false'
+          assert os.environ['AD_SCRAPER_TRACE'].lower() == 'false'
           PY
       - name: Run bounded site-wide crawl with retries and watchdog
         shell: bash
         run: |
           set -euo pipefail
-          for attempt in 1 2 3; do
-            echo "${REPORT_KEY}: scrape attempt $attempt/3"
+          for attempt in 1 2; do
+            echo "${REPORT_KEY}: scrape attempt $attempt/2"
             rm -rf ci-output data/runs
-            if timeout --signal=TERM --kill-after=30s "${MAX_RUNTIME_MINUTES}m" python scripts/ci_site_scrape.py; then
+            if timeout --signal=TERM --kill-after=15s "${MAX_RUNTIME_MINUTES}m" python scripts/ci_site_scrape.py; then
               echo "${REPORT_KEY}: scrape attempt $attempt completed"
               break
             else
               rc=$?
               echo "${REPORT_KEY}: scrape attempt $attempt stopped with exit code $rc"
             fi
-            if [ "$attempt" = 3 ]; then
-              echo "${REPORT_KEY}: all 3 bounded attempts failed"
+            if [ "$attempt" = 2 ]; then
+              echo "${REPORT_KEY}: both bounded attempts failed"
               exit 1
             fi
-            sleep 10
+            sleep 5
           done
       - name: Remove temporary screenshot evidence
         if: always()
@@ -127,6 +144,7 @@ jobs:
           test -s ci-output/crawl_results.json
           test "$(find data/runs -name result.json -type f | wc -l)" -gt 0
           test "$(find data/runs -name screenshot.png -type f | wc -l)" -eq 0
+          test "$(find data/runs -name trace.zip -type f | wc -l)" -eq 0
           test "$(find data/runs -path '*/ad_candidates/*.png' -o -path '*/ad_candidates/*.jpg' -o -path '*/ad_candidates/*.jpeg' -o -path '*/ad_candidates/*.webp' | wc -l)" -eq 0
       - name: Upload standalone latest HTML report
         uses: actions/upload-artifact@v4
@@ -157,8 +175,10 @@ jobs:
           echo "Maximum crawl depth: $MAX_DEPTH" >> "$GITHUB_STEP_SUMMARY"
           echo "Maximum discovered URLs: $MAX_DISCOVERED_URLS" >> "$GITHUB_STEP_SUMMARY"
           echo "Desktop + mobile: $BOTH_DEVICES" >> "$GITHUB_STEP_SUMMARY"
-          echo "Site watchdog: ${MAX_RUNTIME_MINUTES} minutes per attempt" >> "$GITHUB_STEP_SUMMARY"
-          echo 'Screenshots/candidate screenshot files are not retained in the automatic report artifact.' >> "$GITHUB_STEP_SUMMARY"
+          echo "Per-attempt watchdog: ${MAX_RUNTIME_MINUTES} minutes" >> "$GITHUB_STEP_SUMMARY"
+          echo "Navigation timeout: ${TIMEOUT_MS} ms; post-load wait: ${WAIT_MS} ms" >> "$GITHUB_STEP_SUMMARY"
+          echo "Landing destinations: $MAX_LANDING_DESTINATIONS" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Screenshots and traces are not retained in the automatic report.' >> "$GITHUB_STEP_SUMMARY"
 
   comparison:
     name: 13-Site comparison table
@@ -170,6 +190,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
       - name: Install report dependencies
         run: python -m pip install -r backend/requirements.txt
       - name: Download all site report packages
