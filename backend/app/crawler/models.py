@@ -21,7 +21,7 @@ def _prefer_https(value: object) -> object:
 
 class CrawlRequest(BaseModel):
     url: HttpUrl
-    wait_ms: int = Field(default=2500, ge=0, le=30000)
+    wait_ms: int = Field(default=2000, ge=0, le=30000)
     timeout_ms: int = Field(default=60000, ge=1000, le=120000)
     trace: bool = True
     include_ads_txt: bool = True
