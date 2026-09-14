@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from playwright.async_api import Page
@@ -15,7 +16,6 @@ RUNTIME_ADS_SCRIPT = r'''
     gpt: { detected: false, api_ready: false, slots: [], service_targeting: {} },
     prebid: { detected: false, ad_units: [], adserver_targeting: {}, bids: [], winners: [] }
   };
-
   const gt = window.googletag;
   if (gt) {
     out.gpt.detected = true;
@@ -29,10 +29,7 @@ RUNTIME_ADS_SCRIPT = r'''
     out.gpt.slots = slots.map(slot => ({
       element_id: safe(() => slot.getSlotElementId()),
       ad_unit_path: safe(() => slot.getAdUnitPath()),
-      sizes: safe(() => arr(slot.getSizes()).map(s => ({
-        width: s.getWidth(),
-        height: s.getHeight()
-      })), []),
+      sizes: safe(() => arr(slot.getSizes()).map(s => ({width: s.getWidth(), height: s.getHeight()})), []),
       targeting: safe(() => {
         const config = slot.getConfig ? slot.getConfig('targeting') : null;
         if (config && config.targeting) return config.targeting;
@@ -41,109 +38,42 @@ RUNTIME_ADS_SCRIPT = r'''
       }, {}),
       response_information: safe(() => {
         const r = slot.getResponseInformation();
-        return r ? {
-          advertiser_id: r.advertiserId ?? null,
-          campaign_id: r.campaignId ?? null,
-          creative_id: r.creativeId ?? null,
-          creative_template_id: r.creativeTemplateId ?? null,
-          line_item_id: r.lineItemId ?? null
-        } : null;
+        return r ? {advertiser_id: r.advertiserId ?? null, campaign_id: r.campaignId ?? null, creative_id: r.creativeId ?? null, creative_template_id: r.creativeTemplateId ?? null, line_item_id: r.lineItemId ?? null} : null;
       }, null)
     }));
   }
-
   const pb = window.pbjs;
   if (pb) {
     out.prebid.detected = true;
-    out.prebid.ad_units = safe(() => arr(pb.adUnits).map(u => ({
-      code: u.code ?? null,
-      media_types: u.mediaTypes ?? null,
-      bids: arr(u.bids).map(b => ({
-        bidder: b.bidder ?? null,
-        params: b.params ?? null
-      }))
-    })), []);
-
+    out.prebid.ad_units = safe(() => arr(pb.adUnits).map(u => ({code: u.code ?? null, media_types: u.mediaTypes ?? null, bids: arr(u.bids).map(b => ({bidder: b.bidder ?? null, params: b.params ?? null}))})), []);
     out.prebid.adserver_targeting = safe(() => pb.getAdserverTargeting(), {});
     const responses = safe(() => pb.getBidResponses(), {});
     const winners = safe(() => pb.getAllWinningBids(), []);
     const winnerKeys = new Set(winners.map(b => `${b.adUnitCode ?? ''}|${b.bidder ?? ''}|${b.adId ?? ''}|${b.creativeId ?? ''}`));
     const bids = [];
-
     Object.entries(responses || {}).forEach(([adunit, response]) => {
-      const arrResponse = Array.isArray(response)
-        ? response
-        : (response && Array.isArray(response.bids) ? response.bids : []);
-
+      const arrResponse = Array.isArray(response) ? response : (response && Array.isArray(response.bids) ? response.bids : []);
       arrResponse.forEach(b => {
         const key = `${adunit}|${b.bidder ?? ''}|${b.adId ?? ''}|${b.creativeId ?? ''}`;
         const meta = b.meta ?? {};
-        bids.push({
-          ad_unit_code: adunit,
-          bidder: b.bidder ?? null,
-          ad_id: b.adId ?? null,
-          creative_id: b.creativeId ?? null,
-          width: b.width ?? null,
-          height: b.height ?? null,
-          size: b.size ?? null,
-          cpm: typeof b.cpm === 'number' ? b.cpm : null,
-          currency: b.currency ?? null,
-          net_revenue: typeof b.netRevenue === 'boolean' ? b.netRevenue : null,
-          request_timestamp: typeof b.requestTimestamp === 'number' ? b.requestTimestamp : null,
-          response_timestamp: typeof b.responseTimestamp === 'number' ? b.responseTimestamp : null,
-          time_to_respond_ms: typeof b.timeToRespond === 'number' ? b.timeToRespond : null,
-          media_type: b.mediaType ?? meta.mediaType ?? null,
-          deal_id: b.dealId ?? null,
-          adserver_targeting: b.adserverTargeting ?? null,
-          native: b.native ?? null,
-          status: b.status ?? null,
-          ttl_seconds: typeof b.ttl === 'number' ? b.ttl : null,
-          advertiser_domains: arr(meta.advertiserDomains),
-          advertiser_id: meta.advertiserId ?? null,
-          advertiser_name: meta.advertiserName ?? null,
-          agency_id: meta.agencyId ?? null,
-          agency_name: meta.agencyName ?? null,
-          brand_id: meta.brandId ?? null,
-          brand_name: meta.brandName ?? null,
-          network_id: meta.networkId ?? null,
-          network_name: meta.networkName ?? null,
-          demand_source: meta.demandSource ?? null,
-          primary_category_id: meta.primaryCatId ?? null,
-          secondary_category_ids: arr(meta.secondaryCatIds),
-          rendered: b.status === 'rendered' || winnerKeys.has(key)
-        });
+        bids.push({ad_unit_code: adunit, bidder: b.bidder ?? null, ad_id: b.adId ?? null, creative_id: b.creativeId ?? null, width: b.width ?? null, height: b.height ?? null, size: b.size ?? null, cpm: typeof b.cpm === 'number' ? b.cpm : null, currency: b.currency ?? null, net_revenue: typeof b.netRevenue === 'boolean' ? b.netRevenue : null, request_timestamp: typeof b.requestTimestamp === 'number' ? b.requestTimestamp : null, response_timestamp: typeof b.responseTimestamp === 'number' ? b.responseTimestamp : null, time_to_respond_ms: typeof b.timeToRespond === 'number' ? b.timeToRespond : null, media_type: b.mediaType ?? meta.mediaType ?? null, deal_id: b.dealId ?? null, adserver_targeting: b.adserverTargeting ?? null, native: b.native ?? null, status: b.status ?? null, ttl_seconds: typeof b.ttl === 'number' ? b.ttl : null, advertiser_domains: arr(meta.advertiserDomains), advertiser_id: meta.advertiserId ?? null, advertiser_name: meta.advertiserName ?? null, agency_id: meta.agencyId ?? null, agency_name: meta.agencyName ?? null, brand_id: meta.brandId ?? null, brand_name: meta.brandName ?? null, network_id: meta.networkId ?? null, network_name: meta.networkName ?? null, demand_source: meta.demandSource ?? null, primary_category_id: meta.primaryCatId ?? null, secondary_category_ids: arr(meta.secondaryCatIds), rendered: b.status === 'rendered' || winnerKeys.has(key)});
       });
     });
-
     out.prebid.bids = bids;
-    out.prebid.winners = arr(winners).map(b => {
-      const meta = b.meta ?? {};
-      return {
-        ad_unit_code: b.adUnitCode ?? null,
-        bidder: b.bidder ?? null,
-        ad_id: b.adId ?? null,
-        creative_id: b.creativeId ?? null,
-        width: b.width ?? null,
-        height: b.height ?? null,
-        size: b.size ?? null,
-        cpm: typeof b.cpm === 'number' ? b.cpm : null,
-        currency: b.currency ?? null,
-        deal_id: b.dealId ?? null,
-        adserver_targeting: b.adserverTargeting ?? null,
-        advertiser_domains: arr(meta.advertiserDomains),
-        advertiser_id: meta.advertiserId ?? null,
-        advertiser_name: meta.advertiserName ?? null,
-        brand_name: meta.brandName ?? null,
-        network_name: meta.networkName ?? null
-      };
-    });
+    out.prebid.winners = arr(winners).map(b => { const meta = b.meta ?? {}; return {ad_unit_code: b.adUnitCode ?? null, bidder: b.bidder ?? null, ad_id: b.adId ?? null, creative_id: b.creativeId ?? null, width: b.width ?? null, height: b.height ?? null, size: b.size ?? null, cpm: typeof b.cpm === 'number' ? b.cpm : null, currency: b.currency ?? null, deal_id: b.dealId ?? null, adserver_targeting: b.adserverTargeting ?? null, advertiser_domains: arr(meta.advertiserDomains), advertiser_id: meta.advertiserId ?? null, brand_name: meta.brandName ?? null, network_name: meta.networkName ?? null}; });
   }
-
   return out;
 }
 '''
 
 
+RUNTIME_EVAL_TIMEOUT_S = 2.0
+
+
 async def collect_runtime_ads(page: Page) -> dict[str, Any]:
-    """Read publisher ad-stack objects exposed to the page at a point in time."""
-    return await page.evaluate(RUNTIME_ADS_SCRIPT)
+    """Read publisher ad-stack objects without allowing page JS to stall the crawl."""
+    try:
+        result = await asyncio.wait_for(page.evaluate(RUNTIME_ADS_SCRIPT), timeout=RUNTIME_EVAL_TIMEOUT_S)
+        return result if isinstance(result, dict) else {}
+    except Exception:
+        return {"gpt": {"detected": False}, "prebid": {"detected": False}, "error": "runtime inspection timed out or failed"}
