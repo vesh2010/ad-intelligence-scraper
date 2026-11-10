@@ -37,6 +37,7 @@ jobs:
         env:
           SCREENSHOT_COUNT: "25"
           NAV_TIMEOUT_MS: "30000"
+          JPEG_QUALITY: "70"
         run: python scripts/capture_hindustan_times.py
 
       - name: Verify screenshot batch
@@ -44,12 +45,12 @@ jobs:
           test -s ht-screenshot-output/index.html
           test -s ht-screenshot-output/manifest.csv
           test -s ht-screenshot-output/summary.json
-          count=$(find ht-screenshot-output -maxdepth 1 -type f -name '*.png' | wc -l)
+          count=$(find ht-screenshot-output -maxdepth 1 -type f -name '*.jpg' | wc -l)
           echo "Screenshot files: $count"
           test "$count" -eq 25
           echo "## Hindustan Times screenshot batch" >> "$GITHUB_STEP_SUMMARY"
           echo "- Site: https://www.hindustantimes.com/" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Screenshots: $count full-page PNG files" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Screenshots: $count full-page JPEG files (quality 70)" >> "$GITHUB_STEP_SUMMARY"
           echo "- Schedule: 08:00 and 14:00 IST daily" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload screenshot gallery and images
