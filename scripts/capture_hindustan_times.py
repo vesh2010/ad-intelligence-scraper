@@ -7,6 +7,7 @@ import os
 import re
 import time
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from urllib.parse import urljoin, urlparse, urldefrag
 from urllib.robotparser import RobotFileParser
@@ -14,7 +15,10 @@ from urllib.robotparser import RobotFileParser
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
 BASE_URL = "https://www.hindustantimes.com/"
-OUT = Path("ht-screenshot-output")
+RUN_LOCAL = datetime.now(ZoneInfo("Asia/Kolkata"))
+RUN_DATE = RUN_LOCAL.strftime("%Y-%m-%d")
+RUN_TIME = RUN_LOCAL.strftime("%H-%M-%S")
+OUT = Path("screenshots") / RUN_DATE / RUN_TIME
 COUNT = int(os.getenv("SCREENSHOT_COUNT", "25"))
 JPEG_QUALITY = int(os.getenv("JPEG_QUALITY", "70"))
 NAV_TIMEOUT_MS = int(os.getenv("NAV_TIMEOUT_MS", "30000"))
