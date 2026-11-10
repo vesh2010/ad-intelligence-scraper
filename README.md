@@ -152,3 +152,57 @@ For the Windows portable build, run the same script only when using a Python che
 ## Security / deployment guidance
 
 The scraper keeps publisher pages and third-party ad destinations separate. External domains are recorded as ad destinations, ad servers, landing pages or network evidence; they are not promoted to normal site pages unless the crawl configuration explicitly permits them.
+
+## Hindustan Times screenshot monitor
+
+The dedicated `hindustan-times-screenshots.yml` workflow runs at **08:00 and
+14:00 IST** (GitHub scheduled runs can be delayed). It can also be dispatched
+manually. Email delivery is not enabled by this workflow.
+
+Before running, configure repository Actions secrets `PROXY_SERVER` and, when
+the provider requires authentication, `PROXY_USERNAME` and `PROXY_PASSWORD`.
+Never commit their values. Use a Delhi/NCR endpoint, not just a generic India
+endpoint. The browser's egress is checked against ipapi.co before any publisher
+capture. India country verification and an explicit NCR city or Delhi region
+are required; unknown locations, Mumbai, and a state-only Haryana result fail
+closed. This is IP-geolocation evidence, not proof of which ads will be served.
+Missing `PROXY_SERVER` fails before browser installation.
+
+Each complete batch contains exactly **25 distinct canonical final URLs** and
+**25 JPEG viewport screenshots (1440 × 1000)** under
+`screenshots/YYYY-MM-DD/HH-MM-SS/`. Tracking parameters, fragments and host
+aliases do not create distinct pages. Discovery checks robots.txt using the
+proxy-enabled browser context and fails closed if the rules cannot be read.
+There is no repeated-homepage fallback.
+
+Up to 75 permitted candidate pages provide replacements for navigation,
+HTTP, screenshot and duplicate-redirect failures. Failed attempts remain in
+`manifest.csv` and `summary.json` with no screenshot attached; they never count
+toward the required 25. Batches that exhaust candidates fail with the partial
+reports retained. The gallery shows the actual number of saved images.
+`error.json` records terminal failures after the capture script starts, without
+raw browser exception messages. The workflow uploads available diagnostics
+even after capture or validation failure, with 30-day retention.
+
+Ad diagnostics deduplicate nested matching containers and iframes. A visible
+slot is **not** proof of a served creative. `creative_evidence_count` records
+loaded image/video media inside candidate slots; it does not establish
+advertiser identity. Cross-origin iframe contents remain
+`iframe_content_unverified` unless separate loaded-media evidence exists.
+
+Download and extract the Actions artifact, then open its nested `index.html`.
+Keep images alongside it. The automated artifact validator checks manifest /
+summary consistency, unique final URLs, actual JPEG header dimensions, gallery
+image references and reported NCR egress:
+
+```bash
+python scripts/validate_hindustan_times_batch.py screenshots
+PYTHONPATH=. python -m pytest -q backend/tests/test_hindustan_times_capture.py
+```
+
+The tests use mocked capture batches and local Chromium fixture pages, not the
+live publisher or a proxy. Install Playwright and its Chromium first. For Nix
+development, `TEST_CHROMIUM_EXECUTABLE` can select system Chromium for tests.
+Live proxy connectivity, publisher behavior and served ads still require an
+authorized live run and artifact review. Do not enable email reporting before
+the sample gallery has been explicitly approved.
