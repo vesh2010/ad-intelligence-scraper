@@ -33,11 +33,12 @@ jobs:
           python -m pip install playwright
           python -m playwright install --with-deps chromium
 
-      - name: Capture 25 full-page screenshots
+      - name: Capture 25 viewport screenshots with ad diagnostics
         env:
           SCREENSHOT_COUNT: "25"
           NAV_TIMEOUT_MS: "30000"
           JPEG_QUALITY: "70"
+          AD_WAIT_MS: "6000"
         run: python scripts/capture_hindustan_times.py
 
       - name: Verify screenshot batch
@@ -50,7 +51,7 @@ jobs:
           test "$count" -eq 25
           echo "## Hindustan Times screenshot batch" >> "$GITHUB_STEP_SUMMARY"
           echo "- Site: https://www.hindustantimes.com/" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Screenshots: $count full-page JPEG files (quality 70)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Screenshots: $count viewport JPEG files (quality 70)" >> "$GITHUB_STEP_SUMMARY"
           echo "- Schedule: 08:00 and 14:00 IST daily" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload screenshot gallery and images
