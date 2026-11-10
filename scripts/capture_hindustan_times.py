@@ -23,6 +23,10 @@ COUNT = int(os.getenv("SCREENSHOT_COUNT", "25"))
 JPEG_QUALITY = int(os.getenv("JPEG_QUALITY", "70"))
 NAV_TIMEOUT_MS = int(os.getenv("NAV_TIMEOUT_MS", "30000"))
 AD_WAIT_MS = int(os.getenv("AD_WAIT_MS", "6000"))
+PROXY_SERVER = os.getenv("PROXY_SERVER", "").strip()
+PROXY_USERNAME = os.getenv("PROXY_USERNAME", "").strip()
+PROXY_PASSWORD = os.getenv("PROXY_PASSWORD", "")
+REQUIRE_INDIA_PROXY = os.getenv("REQUIRE_INDIA_PROXY", "true").lower() == "true"
 AD_SELECTORS = [
     'iframe[src*="doubleclick.net"]', 'iframe[src*="googlesyndication.com"]',
     'iframe[id*="google_ads"]', '[id^="div-gpt-ad"]', '[id*="google_ads"]',
@@ -104,8 +108,16 @@ def main() -> None:
     robots = robots_parser()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
+    if REQUIRE_INDIA_PROXY and not PROXY_SERVER:
+        raise RuntimeError("India/NCR proxy is required. Configure the PROXY_SERVER GitHub Actions secret; refusing to capture from a potentially US-based GitHub runner.")
+
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        proxy = {"server": PROXY_SERVER} if PROXY_SERVER else None
+        if proxy and PROXY_USERNAME:
+            proxy["username"] = PROXY_USERNAME
+        if proxy and PROXY_PASSWORD:
+            proxy["password"] = PROXY_PASSWORD
+        browser = p.chromium.launch(headless=True, proxy=proxy)
         context = browser.new_context(
             viewport={"width": 1440, "height": 1000},
             device_scale_factor=1,
@@ -115,6 +127,18 @@ def main() -> None:
         page = context.new_page()
         page.set_default_navigation_timeout(NAV_TIMEOUT_MS)
         try:
+            geo_response = page.goto("https://ipapi.co/json/", wait_until="domcontentloaded", timeout=NAV_TIMEOUT_MS)
+            geo = geo_response.json() if geo_response else {}
+            country = str(geo.get("country_code", "")).upper()
+            city = str(geo.get("city", "")).strip()
+            region = str(geo.get("region", "")).strip()
+            ncr_location = (city + " " + region).lower()
+            ncr_terms = ("delhi", "new delhi", "gurgaon", "gurugram", "noida", "ghaziabad", "faridabad")
+            if REQUIRE_INDIA_PROXY and country != "IN":
+                raise RuntimeError(f"Proxy egress is not in India (country={country or 'unknown'}); refusing capture.")
+            if REQUIRE_INDIA_PROXY and not any(term in ncr_location for term in ncr_terms):
+                raise RuntimeError(f"Proxy egress is in India but not verified as Delhi/NCR (city={city}, region={region}); use a Delhi/NCR endpoint.")
+            print(f"Verified proxy egress: country={country}, city={city}, region={region}")
             response = page.goto(BASE_URL, wait_until="domcontentloaded", timeout=NAV_TIMEOUT_MS)
             if response and response.status >= 400:
                 raise RuntimeError(f"Homepage returned HTTP {response.status}")
@@ -234,6 +258,7 @@ img{width:100%;height:auto;border:1px solid #ddd}h2{font-size:18px}a{overflow-wr
                 "site": BASE_URL, "requested_screenshots": COUNT,
                 "successful_screenshots": sum(bool(x["screenshot"]) for x in captures),
                 "captured_at_utc": stamp, "captures": captures,
+                "proxy_geo": {"country": country, "city": city, "region": region},
             }, indent=2), encoding="utf-8")
             if sum(bool(x["screenshot"]) for x in captures) == 0:
                 raise RuntimeError("No screenshots were successfully saved.")
