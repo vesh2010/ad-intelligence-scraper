@@ -22,6 +22,12 @@ OUT = Path("screenshots") / RUN_DATE / RUN_TIME
 COUNT = int(os.getenv("SCREENSHOT_COUNT", "25"))
 JPEG_QUALITY = int(os.getenv("JPEG_QUALITY", "70"))
 NAV_TIMEOUT_MS = int(os.getenv("NAV_TIMEOUT_MS", "30000"))
+AD_WAIT_MS = int(os.getenv("AD_WAIT_MS", "6000"))
+AD_SELECTORS = [
+    'iframe[src*="doubleclick.net"]', 'iframe[src*="googlesyndication.com"]',
+    'iframe[id*="google_ads"]', '[id^="div-gpt-ad"]', '[id*="google_ads"]',
+    '[class*="ad-slot"]', '[class*="advertisement"]', '[data-ad]', '[data-testid*="ad"]',
+]
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
 
@@ -44,6 +50,49 @@ def robots_parser() -> RobotFileParser | None:
     except Exception as exc:
         print(f"WARNING: could not read robots.txt ({exc}); limiting capture to discovered public pages")
         return None
+
+
+
+def inspect_ads(page) -> dict[str, str]:
+    # Scroll to trigger lazy-loaded ad placements, then locate the first visible slot.
+    page.wait_for_timeout(AD_WAIT_MS)
+    try:
+        page.evaluate("""() => new Promise(resolve => {
+            let y = 0;
+            const step = Math.max(500, Math.floor(window.innerHeight * 0.75));
+            const end = Math.min(document.body.scrollHeight, step * 6);
+            const tick = () => {
+                window.scrollTo(0, y);
+                y += step;
+                if (y <= end) setTimeout(tick, 350);
+                else { window.scrollTo(0, 0); resolve(); }
+            };
+            tick();
+        })""")
+        page.wait_for_timeout(1500)
+        return page.evaluate("""(selectors) => {
+            const found = [];
+            for (const selector of selectors) {
+                let nodes = [];
+                try { nodes = Array.from(document.querySelectorAll(selector)); } catch (_) {}
+                for (const el of nodes) {
+                    const r = el.getBoundingClientRect();
+                    const style = getComputedStyle(el);
+                    if (r.width > 30 && r.height > 20 && style.display !== "none" &&
+                        style.visibility !== "hidden" && Number(style.opacity) > 0) {
+                        found.push({selector, top: r.top + window.scrollY});
+                    }
+                }
+            }
+            found.sort((a,b) => a.top - b.top);
+            return {ad_slot_count: String(found.length),
+                    ad_slots: found.slice(0, 10).map(x => x.selector).join("; "),
+                    first_ad_top: found.length ? String(Math.round(found[0].top)) : "",
+                    ad_detected: found.length ? "yes" : "no"};
+        }""", AD_SELECTORS)
+    except Exception as exc:
+        return {"ad_slot_count": "0", "ad_slots": "", "first_ad_top": "",
+                "ad_detected": "inspection_error: " + type(exc).__name__}
 
 
 def main() -> None:
@@ -130,15 +179,18 @@ def main() -> None:
                     response = page.goto(url, wait_until="domcontentloaded", timeout=NAV_TIMEOUT_MS)
                     if response and response.status >= 400:
                         status = f"http_{response.status}"
-                    page.wait_for_timeout(1200)
                     title = page.title()
-                    # Full-page capture includes the currently rendered page, not just the viewport.
+                    ad_info = inspect_ads(page)
+                    if ad_info.get("first_ad_top"):
+                        page.evaluate("(y) => window.scrollTo(0, Math.max(0, y - 120))", int(ad_info["first_ad_top"]))
+                        page.wait_for_timeout(700)
                     filename = f"{idx:02d}_{stamp}.jpg"
-                    page.screenshot(path=str(OUT / filename), type="jpeg", quality=JPEG_QUALITY, full_page=True, animations="disabled", timeout=60000)
+                    page.screenshot(path=str(OUT / filename), type="jpeg", quality=JPEG_QUALITY, full_page=False, animations="disabled", timeout=60000)
                 except PlaywrightTimeoutError:
                     status = "navigation_timeout"
+                    ad_info = inspect_ads(page)
                     filename = f"{idx:02d}_{stamp}.jpg"
-                    page.screenshot(path=str(OUT / filename), type="jpeg", quality=JPEG_QUALITY, full_page=True, animations="disabled", timeout=60000)
+                    page.screenshot(path=str(OUT / filename), type="jpeg", quality=JPEG_QUALITY, full_page=False, animations="disabled", timeout=60000)
                 except Exception as exc:
                     status = f"error: {type(exc).__name__}: {exc}"
                     filename = ""
@@ -148,6 +200,9 @@ def main() -> None:
                     "title": title,
                     "captured_at_utc": started,
                     "status": status,
+                    "ad_detected": ad_info.get("ad_detected", "not_checked"),
+                    "ad_slot_count": ad_info.get("ad_slot_count", "0"),
+                    "ad_slots": ad_info.get("ad_slots", ""),
                     "screenshot": filename,
                 })
                 print(f"[{idx}/{COUNT}] {status}: {url}")
@@ -171,8 +226,8 @@ body{font:15px system-ui;margin:24px;background:#f4f5f7;color:#171717}header{max
 main{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:18px;max-width:1600px;margin:24px auto}
 article{background:white;padding:16px;border-radius:10px;box-shadow:0 1px 5px #0001;overflow:hidden}
 img{width:100%;height:auto;border:1px solid #ddd}h2{font-size:18px}a{overflow-wrap:anywhere}
-</style></head><body><header><h1>Hindustan Times · 25 full-page captures</h1>
-<p>Capture batch: """ + html.escape(stamp) + f""" UTC. Screenshots are full-page browser captures of publicly accessible same-site pages.</p></header><main>""" + "".join(cards) + """</main></body></html>"""
+</style></head><body><header><h1>Hindustan Times · 25 viewport captures</h1>
+<p>Capture batch: """ + html.escape(stamp) + f""" UTC. Screenshots are standard viewport JPEG captures. Ad slot diagnostics are in manifest.csv; a slot does not guarantee an ad creative was served.</p></header><main>""" + "".join(cards) + """</main></body></html>"""
             (OUT / "index.html").write_text(gallery, encoding="utf-8")
             (OUT / "summary.json").write_text(json.dumps({
                 "site": BASE_URL, "requested_screenshots": COUNT,
