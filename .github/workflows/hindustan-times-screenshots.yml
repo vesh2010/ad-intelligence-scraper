@@ -1,0 +1,61 @@
+name: Hindustan Times Screenshot Monitoring
+
+on:
+  schedule:
+    # 08:00 and 14:00 India Standard Time (UTC+05:30)
+    - cron: "30 2 * * *"
+    - cron: "30 8 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hindustan-times-screenshot-monitor
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Playwright
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Capture 25 full-page screenshots
+        env:
+          SCREENSHOT_COUNT: "25"
+          NAV_TIMEOUT_MS: "30000"
+        run: python scripts/capture_hindustan_times.py
+
+      - name: Verify screenshot batch
+        run: |
+          test -s ht-screenshot-output/index.html
+          test -s ht-screenshot-output/manifest.csv
+          test -s ht-screenshot-output/summary.json
+          count=$(find ht-screenshot-output -maxdepth 1 -type f -name '*.png' | wc -l)
+          echo "Screenshot files: $count"
+          test "$count" -eq 25
+          echo "## Hindustan Times screenshot batch" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Site: https://www.hindustantimes.com/" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Screenshots: $count full-page PNG files" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Schedule: 08:00 and 14:00 IST daily" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload screenshot gallery and images
+        uses: actions/upload-artifact@v4
+        with:
+          name: hindustan-times-screenshots-${{ github.run_id }}
+          path: ht-screenshot-output/
+          if-no-files-found: error
+          retention-days: 30
