@@ -16,6 +16,7 @@ from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeo
 BASE_URL = "https://www.hindustantimes.com/"
 OUT = Path("ht-screenshot-output")
 COUNT = int(os.getenv("SCREENSHOT_COUNT", "25"))
+JPEG_QUALITY = int(os.getenv("JPEG_QUALITY", "70"))
 NAV_TIMEOUT_MS = int(os.getenv("NAV_TIMEOUT_MS", "30000"))
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
@@ -128,11 +129,11 @@ def main() -> None:
                     page.wait_for_timeout(1200)
                     title = page.title()
                     # Full-page capture includes the currently rendered page, not just the viewport.
-                    filename = f"{idx:02d}_{stamp}.png"
-                    page.screenshot(path=str(OUT / filename), full_page=True, animations="disabled", timeout=60000)
+                    filename = f"{idx:02d}_{stamp}.jpg"
+                    page.screenshot(path=str(OUT / filename), type="jpeg", quality=JPEG_QUALITY, full_page=True, animations="disabled", timeout=60000)
                 except PlaywrightTimeoutError:
                     status = "navigation_timeout"
-                    filename = f"{idx:02d}_{stamp}.png"
+                    filename = f"{idx:02d}_{stamp}.jpg"
                     page.screenshot(path=str(OUT / filename), full_page=True, animations="disabled", timeout=60000)
                 except Exception as exc:
                     status = f"error: {type(exc).__name__}: {exc}"
@@ -167,7 +168,7 @@ main{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:1
 article{background:white;padding:16px;border-radius:10px;box-shadow:0 1px 5px #0001;overflow:hidden}
 img{width:100%;height:auto;border:1px solid #ddd}h2{font-size:18px}a{overflow-wrap:anywhere}
 </style></head><body><header><h1>Hindustan Times · 25 full-page captures</h1>
-<p>Capture batch: """ + html.escape(stamp) + """ UTC. Screenshots are full-page browser captures of publicly accessible same-site pages.</p></header><main>""" + "".join(cards) + """</main></body></html>"""
+<p>Capture batch: """ + html.escape(stamp) + f""" UTC. Screenshots are full-page browser captures of publicly accessible same-site pages.</p></header><main>""" + "".join(cards) + """</main></body></html>"""
             (OUT / "index.html").write_text(gallery, encoding="utf-8")
             (OUT / "summary.json").write_text(json.dumps({
                 "site": BASE_URL, "requested_screenshots": COUNT,
