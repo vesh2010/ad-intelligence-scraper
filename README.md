@@ -152,3 +152,115 @@ For the Windows portable build, run the same script only when using a Python che
 ## Security / deployment guidance
 
 The scraper keeps publisher pages and third-party ad destinations separate. External domains are recorded as ad destinations, ad servers, landing pages or network evidence; they are not promoted to normal site pages unless the crawl configuration explicitly permits them.
+
+## Hindustan Times screenshot monitor
+
+The dedicated `hindustan-times-screenshots.yml` workflow runs at **08:00 and
+14:00 IST** (GitHub scheduled runs can be delayed). It can also be dispatched
+manually. Email delivery is not enabled by this workflow.
+
+Before running, configure repository Actions secrets `PROXY_SERVER` and, when
+the provider requires authentication, `PROXY_USERNAME` and `PROXY_PASSWORD`.
+Never commit their values. Use a Delhi/NCR endpoint, not just a generic India
+endpoint. The browser's egress is checked against ipapi.co before any publisher
+capture. India country verification and an explicit NCR city or Delhi region
+are required; unknown locations, Mumbai, and a state-only Haryana result fail
+closed. This is IP-geolocation evidence, not proof of which ads will be served.
+Missing `PROXY_SERVER` fails before browser installation.
+
+Each complete batch contains exactly **25 distinct canonical final URLs** and
+**25 JPEG viewport screenshots (1440 × 1000)** under
+`screenshots/YYYY-MM-DD/HH-MM-SS/`. Tracking parameters, fragments and host
+aliases do not create distinct pages. Discovery checks robots.txt using the
+proxy-enabled browser context and fails closed if the rules cannot be read.
+There is no repeated-homepage fallback.
+
+Up to 75 permitted candidate pages provide replacements for navigation,
+HTTP, screenshot and duplicate-redirect failures. Failed attempts remain in
+`manifest.csv` and `summary.json` with no screenshot attached; they never count
+toward the required 25. Batches that exhaust candidates fail with the partial
+reports retained. The gallery shows the actual number of saved images.
+`error.json` records terminal failures after the capture script starts, without
+raw browser exception messages. The workflow uploads available diagnostics
+even after capture or validation failure, with 30-day retention.
+
+Ad diagnostics deduplicate nested matching containers and iframes. A visible
+slot is **not** proof of a served creative. `creative_evidence_count` records
+loaded image/video media inside candidate slots; it does not establish
+advertiser identity. Cross-origin iframe contents remain
+`iframe_content_unverified` unless separate loaded-media evidence exists.
+
+Download and extract the Actions artifact, then open its nested `index.html`.
+Keep images alongside it. The automated artifact validator checks manifest /
+summary consistency, unique final URLs, actual JPEG header dimensions, gallery
+image references and reported NCR egress:
+
+```bash
+python scripts/validate_hindustan_times_batch.py screenshots
+PYTHONPATH=. python -m pytest -q backend/tests/test_hindustan_times_capture.py
+```
+
+The tests use mocked capture batches and local Chromium fixture pages, not the
+live publisher or a proxy. Install Playwright and its Chromium first. For Nix
+development, `TEST_CHROMIUM_EXECUTABLE` can select system Chromium for tests.
+Live proxy connectivity, publisher behavior and served ads still require an
+authorized live run and artifact review. Do not enable email reporting before
+the sample gallery has been explicitly approved.
+
+### Free Windows option: use your own NCR computer
+
+If you have a Windows computer whose **actual internet exit is in Delhi/NCR**,
+you can run the monitor there instead of paying for a remote proxy. The local
+runner starts a temporary `proxy.py` forward proxy bound **only to 127.0.0.1**,
+uses it for Playwright, and stops its process tree afterward. It does not
+intercept TLS, change Windows proxy settings, open a firewall port, or expose
+the computer to GitHub. Other local programs can reach the proxy while it runs;
+use this only on a trusted computer. A VPN may change the detected exit location.
+
+Install Python **3.12** from python.org with its Python launcher. Download this
+repository's code and extract it to a permanent folder. Open PowerShell in
+that folder and run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\setup_ht_monitor.ps1
+```
+
+This installs an isolated environment and Chromium, starts a temporary local
+proxy, and verifies browser egress. It will fail rather than accept a non-NCR
+or unknown location. It does not schedule captures yet. The process-only
+execution-policy argument does not change your saved Windows execution policy.
+
+Run and inspect a sample:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\run_ht_monitor.ps1
+```
+
+Reports are saved locally under `screenshots/`, including the nested
+`index.html` gallery, CSV manifest and JSON summary. Logs are under
+`.ht-monitor/logs/`. Nothing is uploaded or emailed.
+
+To install the daily schedule after a successful setup, ensure Windows uses
+**India Standard Time**, then run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\setup_ht_monitor.ps1 -InstallSchedule
+```
+
+The installer checks egress again before registering the
+`Hindustan Times NCR Screenshot Monitor` Task Scheduler task. It runs at
+08:00 and 14:00 IST, only while you are signed in. Keep the computer awake and
+connected; wake timers depend on Windows/hardware settings. Missed runs are
+not replayed. Concurrent runs are blocked. The task does not require an
+administrator account, store your Windows password, or replace an existing task.
+
+To remove the schedule:
+
+```powershell
+Unregister-ScheduledTask -TaskName "Hindustan Times NCR Screenshot Monitor" -Confirm
+```
+
+This local route **does not fix or disable the GitHub-hosted scheduled job**:
+that separate job still needs a remotely reachable verified NCR proxy.
+Do not forward your localhost proxy port to the internet. No proxy subscription
+is needed for the local route, but normal internet/data and electricity costs apply.
