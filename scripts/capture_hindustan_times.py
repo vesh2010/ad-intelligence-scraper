@@ -175,6 +175,7 @@ def main() -> None:
                 started = datetime.now(timezone.utc).isoformat()
                 status = "ok"
                 title = ""
+                ad_info = {"ad_detected": "not_checked", "ad_slot_count": "0", "ad_slots": ""}
                 try:
                     response = page.goto(url, wait_until="domcontentloaded", timeout=NAV_TIMEOUT_MS)
                     if response and response.status >= 400:
