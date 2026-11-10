@@ -134,7 +134,7 @@ def main() -> None:
                 except PlaywrightTimeoutError:
                     status = "navigation_timeout"
                     filename = f"{idx:02d}_{stamp}.jpg"
-                    page.screenshot(path=str(OUT / filename), full_page=True, animations="disabled", timeout=60000)
+                    page.screenshot(path=str(OUT / filename), type="jpeg", quality=JPEG_QUALITY, full_page=True, animations="disabled", timeout=60000)
                 except Exception as exc:
                     status = f"error: {type(exc).__name__}: {exc}"
                     filename = ""
