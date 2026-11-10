@@ -39,6 +39,10 @@ jobs:
           NAV_TIMEOUT_MS: "30000"
           JPEG_QUALITY: "70"
           AD_WAIT_MS: "6000"
+          REQUIRE_INDIA_PROXY: "true"
+          PROXY_SERVER: ${{ secrets.PROXY_SERVER }}
+          PROXY_USERNAME: ${{ secrets.PROXY_USERNAME }}
+          PROXY_PASSWORD: ${{ secrets.PROXY_PASSWORD }}
         run: python scripts/capture_hindustan_times.py
 
       - name: Verify screenshot batch
