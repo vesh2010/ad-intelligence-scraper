@@ -42,10 +42,10 @@ jobs:
 
       - name: Verify screenshot batch
         run: |
-          test -s ht-screenshot-output/index.html
-          test -s ht-screenshot-output/manifest.csv
-          test -s ht-screenshot-output/summary.json
-          count=$(find ht-screenshot-output -maxdepth 1 -type f -name '*.jpg' | wc -l)
+          test -s screenshots/index.html
+          test -s screenshots/manifest.csv
+          test -s screenshots/summary.json
+          count=$(find screenshots -type f -name '*.jpg' | wc -l)
           echo "Screenshot files: $count"
           test "$count" -eq 25
           echo "## Hindustan Times screenshot batch" >> "$GITHUB_STEP_SUMMARY"
@@ -57,6 +57,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: hindustan-times-screenshots-${{ github.run_id }}
-          path: ht-screenshot-output/
+          path: screenshots/
           if-no-files-found: error
           retention-days: 30
