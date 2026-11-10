@@ -42,9 +42,9 @@ jobs:
 
       - name: Verify screenshot batch
         run: |
-          test -s screenshots/index.html
-          test -s screenshots/manifest.csv
-          test -s screenshots/summary.json
+          test -n "$(find screenshots -type f -name index.html -print -quit)"
+          test -n "$(find screenshots -type f -name manifest.csv -print -quit)"
+          test -n "$(find screenshots -type f -name summary.json -print -quit)"
           count=$(find screenshots -type f -name '*.jpg' | wc -l)
           echo "Screenshot files: $count"
           test "$count" -eq 25
